@@ -32,6 +32,7 @@ def run_qm_then_rf(
     # allow config to override var_name and output path for QM
     qm_var = cfg.get("var_name")
     qm_output = cfg.get("output_dir")
+    print(ref_path)
 
     # ensure output directory exists if provided
     if qm_output:

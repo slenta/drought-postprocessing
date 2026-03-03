@@ -1,4 +1,4 @@
-hindcasts_json: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/data/train/cwb/cwb-era5-tamsat-africa.json"
+hindcasts_json: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/data/train/cwb/dwd-hindcasts_lm1-6_test.json"
 reference_data: "/work/bk1318/k202208/crai/hindcast-pp/data/spei/cwb/era5/era5-tamsat_cwb_remapped_invlat.nc"
 residual_json: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/data/train/cwb/cwb-era5-tamsat-africa_residual.json"
 var_name: "CWB"                                  # variable name in residual files
