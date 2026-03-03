@@ -1,0 +1,35 @@
+--data-root-dir ./data/
+--mask-dir ./data/masks/tas/train
+
+--config-name tas 
+--run-name era5-1x1-tas-acc
+
+--model-dir ./model-checkpoints/
+--evaluation-dirs ./evaluations/
+--log-dir ./logs/
+
+--data-names tas/era5-1x1-train.json 
+--mask-names mpi-esm-hr-ly1-3-acc-masks.json 
+--val-names tas/era5-1x1-val.json 
+--test-names test/mpi-esm-hr-ly1-test.json
+--data-types tas 
+
+--device cuda 
+--n-filters 18
+--n-threads 64
+--n-target-data 0
+--multiple-gpus
+--lr 2e-4
+--out-channels 1
+
+--eval-names demo
+--dataset-name mpi-esm-hr
+--plot-result 0,100
+--shuffle-masks
+--global-padding
+--encoding-layers 3
+--pooling-layers 0
+--normalize-data
+
+--save-model-interval 50000
+--log-interval 100
