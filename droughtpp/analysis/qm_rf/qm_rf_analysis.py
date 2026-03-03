@@ -38,13 +38,13 @@ def run_qm_then_rf(
     if qm_output:
         Path(qm_output).mkdir(parents=True, exist_ok=True)
 
-    # run quantile mapping (use or omit output_path depending on availability)
-    quantile_map_json(
-        str(qm_json_path),
-        ref_path=ref_path,
-        var_name=qm_var,
-        out_dir=str(qm_output),
-    )
+    # # run quantile mapping (use or omit output_path depending on availability)
+    # quantile_map_json(
+    #     str(qm_json_path),
+    #     ref_path=ref_path,
+    #     var_name=qm_var,
+    #     out_dir=str(qm_output),
+    # )
 
     # 2) run RF training (train.main expects a Path to the YAML config)
     rf_train_module.main(Path(config_path))

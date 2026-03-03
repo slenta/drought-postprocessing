@@ -1,5 +1,3 @@
-# filepath: /work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/analysis/qm_rf/random_forest/train_evaluate.py
-# ...existing code...
 import json
 import argparse
 from pathlib import Path
@@ -10,61 +8,47 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from joblib import dump
-from sklearn.metrics import mean_squared_error, r2_score
-from tqdm import tqdm
+from sklearn.ensemble import RandomForestRegressor
 
 from .rf_net import RandomForestBiasCorrector
 
 
-def collect_train_eval_sets(
+def collect_train_sets(
     residuals_json: Path,
     hindcasts_json: Path,
     var_name: str,
     predictor_vars: List[str],
     eval_years: List[int],
 ):
-    """
-    Collect training and evaluation sets from two JSON files:
-      - residuals_json: JSON list (or dict with key 'residuals') of paths to _qm_residual NetCDFs
-      - hindcasts_json: JSON list (or dict with key 'hindcasts') of corresponding hindcast NetCDFs
-
-    Lists are matched by index. Returns X_train, y_train, X_eval, y_eval.
-    """
-
     with open(residuals_json, "r") as fh:
         residuals = json.load(fh)
     with open(hindcasts_json, "r") as fh:
         hindcasts = json.load(fh)
 
-    X_train_parts = []
-    y_train_parts = []
-    X_eval_parts = []
-    y_eval_parts = []
+    if len(residuals) != len(hindcasts):
+        raise RuntimeError(
+            "Residuals and hindcasts JSON must contain same number of entries (matched by index)"
+        )
+
+    X_parts = []
+    y_parts = []
 
     RF = RandomForestBiasCorrector
 
-    for resid_path, hindcast_path in tqdm(
-        zip(residuals, hindcasts),
-        total=len(residuals),
-        desc="Collecting training samples",
-    ):
+    for resid_path, hindcast_path in zip(residuals, hindcasts):
         resid_path = str(resid_path)
         hindcast_path = str(hindcast_path)
 
-        # load residual DA and predictor dataset
         res_da = RF.load_residual_da(resid_path, var_name)
         pred_ds = xr.open_dataset(hindcast_path)
 
-        # align residual with predictors (exact join)
         aligned = xr.align(res_da, *[pred_ds[v] for v in predictor_vars], join="exact")
         res_aligned = aligned[0]
         preds_aligned = aligned[1:]
 
-        # stack to samples
         res_s = RF._stack_by_samples(res_aligned)
         pred_s_list = [RF._stack_by_samples(p) for p in preds_aligned]
 
-        # extract years if time coord exists in stacked coords
         years = None
         if "time" in res_s.coords:
             try:
@@ -72,7 +56,6 @@ def collect_train_eval_sets(
             except Exception:
                 years = None
 
-        # build full X,y arrays
         X_full = pd.DataFrame(
             {name: p.values for name, p in zip(predictor_vars, pred_s_list)}
         )
@@ -82,45 +65,34 @@ def collect_train_eval_sets(
             np.isfinite(X_full.values), axis=1
         )
 
-        # create train/eval masks based on years if available
+        # keep only training samples (exclude eval_years)
         if years is not None and len(eval_years) > 0:
             eval_mask_year = np.isin(years, eval_years)
         else:
             eval_mask_year = np.zeros_like(finite_mask, dtype=bool)
 
         train_mask = finite_mask & (~eval_mask_year)
-        eval_mask = finite_mask & (eval_mask_year)
 
         if train_mask.any():
-            X_train_parts.append(X_full.loc[train_mask].reset_index(drop=True))
-            y_train_parts.append(y_full.loc[train_mask].reset_index(drop=True))
-        if eval_mask.any():
-            X_eval_parts.append(X_full.loc[eval_mask].reset_index(drop=True))
-            y_eval_parts.append(y_full.loc[eval_mask].reset_index(drop=True))
+            X_parts.append(X_full.loc[train_mask].reset_index(drop=True))
+            y_parts.append(y_full.loc[train_mask].reset_index(drop=True))
 
-        # close dataset
         pred_ds.close()
 
-    X_train = pd.concat(X_train_parts, ignore_index=True)
-    y_train = pd.concat(y_train_parts, ignore_index=True)
+    if len(X_parts) == 0:
+        raise RuntimeError("No training samples collected (check eval years / data).")
 
-    if len(X_eval_parts) > 0:
-        X_eval = pd.concat(X_eval_parts, ignore_index=True)
-        y_eval = pd.concat(y_eval_parts, ignore_index=True)
-    else:
-        X_eval = pd.DataFrame(columns=predictor_vars)
-        y_eval = pd.Series(dtype=float)
-
-    return X_train, y_train, X_eval, y_eval
+    X = pd.concat(X_parts, ignore_index=True)
+    y = pd.concat(y_parts, ignore_index=True)
+    return X, y
 
 
 def main(config_path: Path):
     with open(config_path, "r") as fh:
         cfg = yaml.safe_load(fh)
 
-    # support new config keys residuals_json and hindcasts_json (fall back to older names if present)
-    residuals_json = Path(cfg.get("residual_json"))
-    hindcasts_json = Path(cfg.get("hindcasts_json"))
+    residuals_json = Path(cfg["residuals_json"])
+    hindcasts_json = Path(cfg["hindcasts_json"])
 
     out_dir = Path(cfg.get("output_dir", "./rf_out"))
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -129,7 +101,7 @@ def main(config_path: Path):
     predictor_vars = cfg.get("predictor_vars", [var_name])
     eval_years = cfg.get("leave_out_years", [])
 
-    X_train, y_train, X_eval, y_eval = collect_train_eval_sets(
+    X_train, y_train = collect_train_sets(
         residuals_json, hindcasts_json, var_name, predictor_vars, eval_years
     )
 
@@ -141,25 +113,10 @@ def main(config_path: Path):
         random_state=cfg.get("random_state", 0),
     )
 
-    # save model
     model_path = out_dir / "rf_model.joblib"
     dump(model, model_path)
 
-    # evaluation
-    metrics = {}
-    preds = model.predict(X_eval.values)
-    rmse = float(np.sqrt(mean_squared_error(y_eval.values, preds)))
-    r2 = float(r2_score(y_eval.values, preds))
-    metrics = {"rmse": rmse, "r2": r2, "n_eval_samples": int(len(y_eval))}
-
-    # save metrics
-    metrics_path = out_dir / "evaluation_metrics.yaml"
-    with open(metrics_path, "w") as fh:
-        yaml.safe_dump(metrics, fh)
-
-    print(f"Model saved to: {model_path}")
-    print(f"Evaluation metrics saved to: {metrics_path}")
-    print(f"Evaluation metrics: {metrics}")
+    print(f"Training complete. Model saved to: {model_path}")
 
 
 if __name__ == "__main__":

@@ -26,11 +26,9 @@ def quantile_map_json(
 
         # align observation and simulation on time coordinate if present
         sim_da = ds[var_name]
-        print(obs_da.shape, sim_da.shape, fp, obs_da.shape)
         common = np.intersect1d(obs_da["time"].values, sim_da["time"].values)
-        obs_al = obs_da.sel(time=common)
-        sim_al = sim_da.sel(time=common)
-        print(obs_al.shape, sim_al.shape)
+        obs_al = obs_da.sel(time=common).squeeze()
+        sim_al = sim_da.sel(time=common).squeeze()
 
         adjusted = adjust(
             method="quantile_mapping",
@@ -46,6 +44,7 @@ def quantile_map_json(
         base, ext = os.path.splitext(os.path.basename(fp))
         out_path = os.path.join(out_dir, f"{base}_qm{ext}")
         ds_out.to_netcdf(out_path)
+
         # compute residuals (original minus adjusted) and save separately
         residual = ds[var_name] - adjusted[var_name]
         ds_res = ds.copy()
