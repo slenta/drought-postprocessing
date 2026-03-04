@@ -14,8 +14,11 @@ outputs/*
 *.log
 
 # Evaluation files
+eval_results/*
 evaluations/*
 *.pdf
 *.jpg
 *.png
 *.nc
+*.wandb
+*.joblib
