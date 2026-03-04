@@ -7,11 +7,13 @@ import tempfile
 
 # relative imports within the package
 from .quantile_mapping.quantile_mapping import quantile_map_json
-from .random_forest import train_evaluate as rf_train_module
+from .random_forest.evaluate import evaluate as rf_evaluate
+from .random_forest.train import train as rf_train
 
 
 def run_qm_then_rf(
     config_path: str,
+    train_rf: bool = False,
 ):
     """
     Run additive quantile mapping for all hindcasts listed in hindcasts_json (or taken from the RF config),
@@ -46,8 +48,11 @@ def run_qm_then_rf(
     #     out_dir=str(qm_output),
     # )
 
-    # 2) run RF training (train.main expects a Path to the YAML config)
-    rf_train_module.main(Path(config_path))
+    # 2) run RF evaluation and train if given
+    if train_rf:
+        rf_train(Path(config_path))
+
+    rf_evaluate(Path(config_path))
 
 
 if __name__ == "__main__":
@@ -58,4 +63,4 @@ if __name__ == "__main__":
     )
     parser.add_argument("config", help="Path to RF/QM workflow YAML config")
     args = parser.parse_args()
-    run_qm_then_rf(str(args.config))
+    run_qm_then_rf(str(args.config), train_rf=False)

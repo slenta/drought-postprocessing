@@ -2,6 +2,8 @@ import typing as _t
 import numpy as np
 import xarray as xr
 import pandas as pd
+import time
+from tqdm import tqdm
 from sklearn.ensemble import RandomForestRegressor
 
 
@@ -11,7 +13,6 @@ class RandomForestBiasCorrector:
 
     Usage:
       rf = RandomForestBiasCorrector()
-      da_res = rf.load_residual_da(residual_path, var_name)
       X, y, stacked_ref = rf.prepare_training_data(da_res, predictor_ds, predictor_vars)
       rf.train(X, y)
       corrected, predicted = rf.apply_rf_correction(original_da, predictor_ds, predictor_vars)
@@ -20,12 +21,6 @@ class RandomForestBiasCorrector:
 
     def __init__(self):
         self.model: _t.Optional[RandomForestRegressor] = None
-
-    @staticmethod
-    def load_residual_da(path: str, var_name: str) -> xr.DataArray:
-        """Load residual DataArray from a netCDF file."""
-        ds = xr.open_dataset(path)
-        return ds[var_name]
 
     @staticmethod
     def _stack_by_samples(da: xr.DataArray) -> xr.DataArray:
@@ -77,6 +72,47 @@ class RandomForestBiasCorrector:
             n_estimators=n_estimators, random_state=random_state, n_jobs=-1
         )
         rf.fit(X.values, y.values)
+        self.model = rf
+        return rf
+
+    def train_with_eta(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        n_estimators: int = 100,
+        chunk_size: int = 10,
+    ) -> RandomForestRegressor:
+
+        start = time.time()
+        total_done = 0
+        first = min(chunk_size, n_estimators)
+
+        rf = RandomForestRegressor(n_estimators=first, warm_start=True, n_jobs=-1)
+        rf.fit(X.values, y.values)
+        total_done += first
+
+        pbar = tqdm(total=n_estimators, desc="RF training", unit="trees")
+        pbar.update(first)
+
+        while total_done < n_estimators:
+            chunk_start = time.time()
+            add = min(chunk_size, n_estimators - total_done)
+            rf.n_estimators = total_done + add
+            rf.fit(X.values, y.values)
+            total_done += add
+            chunk_time = time.time() - chunk_start
+
+            elapsed = time.time() - start
+            avg_per_tree = elapsed / total_done
+            remaining = n_estimators - total_done
+            eta = remaining * avg_per_tree
+
+            pbar.update(add)
+            print(
+                f"Elapsed {elapsed:.0f}s — trees {total_done}/{n_estimators} — last_chunk {chunk_time:.1f}s — ETA {eta:.0f}s"
+            )
+
+        pbar.close()
         self.model = rf
         return rf
 

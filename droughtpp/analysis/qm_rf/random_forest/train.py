@@ -9,6 +9,7 @@ import pandas as pd
 import xarray as xr
 from joblib import dump
 from sklearn.ensemble import RandomForestRegressor
+from IPython import embed
 
 from .rf_net import RandomForestBiasCorrector
 
@@ -25,11 +26,6 @@ def collect_train_sets(
     with open(hindcasts_json, "r") as fh:
         hindcasts = json.load(fh)
 
-    if len(residuals) != len(hindcasts):
-        raise RuntimeError(
-            "Residuals and hindcasts JSON must contain same number of entries (matched by index)"
-        )
-
     X_parts = []
     y_parts = []
 
@@ -39,25 +35,20 @@ def collect_train_sets(
         resid_path = str(resid_path)
         hindcast_path = str(hindcast_path)
 
-        res_da = RF.load_residual_da(resid_path, var_name)
-        pred_ds = xr.open_dataset(hindcast_path)
+        res_da = xr.open_dataset(resid_path)[var_name]
+        pred_da = xr.open_dataset(hindcast_path)[var_name]
 
-        aligned = xr.align(res_da, *[pred_ds[v] for v in predictor_vars], join="exact")
-        res_aligned = aligned[0]
-        preds_aligned = aligned[1:]
+        res_s = RF._stack_by_samples(res_da)
+        pred_s = RF._stack_by_samples(pred_da)
 
-        res_s = RF._stack_by_samples(res_aligned)
-        pred_s_list = [RF._stack_by_samples(p) for p in preds_aligned]
-
-        years = None
-        if "time" in res_s.coords:
-            try:
-                years = pd.to_datetime(res_s.coords["time"].values).year
-            except Exception:
-                years = None
+        years = pd.to_datetime(res_s.coords["time"].values).year
 
         X_full = pd.DataFrame(
-            {name: p.values for name, p in zip(predictor_vars, pred_s_list)}
+            {
+                "predictor": pred_s.values,  # stacked predictor
+                "lat": res_s.coords["latitude"].values,
+                "lon": res_s.coords["longitude"].values,
+            }
         )
         y_full = pd.Series(res_s.values, name="residual")
 
@@ -73,21 +64,15 @@ def collect_train_sets(
 
         train_mask = finite_mask & (~eval_mask_year)
 
-        if train_mask.any():
-            X_parts.append(X_full.loc[train_mask].reset_index(drop=True))
-            y_parts.append(y_full.loc[train_mask].reset_index(drop=True))
-
-        pred_ds.close()
-
-    if len(X_parts) == 0:
-        raise RuntimeError("No training samples collected (check eval years / data).")
+        X_parts.append(X_full.loc[train_mask].reset_index(drop=True))
+        y_parts.append(y_full.loc[train_mask].reset_index(drop=True))
 
     X = pd.concat(X_parts, ignore_index=True)
     y = pd.concat(y_parts, ignore_index=True)
     return X, y
 
 
-def main(config_path: Path):
+def train(config_path: Path):
     with open(config_path, "r") as fh:
         cfg = yaml.safe_load(fh)
 
@@ -106,11 +91,12 @@ def main(config_path: Path):
     )
 
     rf = RandomForestBiasCorrector()
-    model = rf.train(
-        X_train,
-        y_train,
-        n_estimators=cfg.get("n_estimators", 100),
-        random_state=cfg.get("random_state", 0),
+    print(cfg.get("n_estimators"), X_train.shape, y_train.shape)
+    model = rf.train_with_eta(
+        X=X_train,
+        y=y_train,
+        n_estimators=cfg.get("n_estimators"),
+        chunk_size=cfg.get("chunk_size"),
     )
 
     model_path = out_dir / "rf_model.joblib"
@@ -131,4 +117,4 @@ if __name__ == "__main__":
         help="Path to training config YAML",
     )
     args = parser.parse_args()
-    main(Path(args.config))
+    train(Path(args.config))
