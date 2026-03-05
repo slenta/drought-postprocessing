@@ -20,6 +20,7 @@ def quantile_map_json(
 
     ds_obs = xr.open_dataset(ref_path)
     obs_da = ds_obs[var_name]
+    print(n_quantiles)
 
     for fp in tqdm(files, desc="Quantile mapping"):
         ds = xr.open_dataset(fp)

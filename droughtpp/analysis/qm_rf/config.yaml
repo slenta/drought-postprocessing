@@ -1,6 +1,7 @@
 hindcasts_json: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/data/train/cwb/dwd-hindcasts_lm1-6_test.json"
 reference_data: "/work/bk1318/k202208/crai/hindcast-pp/data/spei/cwb/era5/era5-tamsat_cwb_remapped_invlat.nc"
 residuals_json: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/data/train/cwb/dwd-hindcasts_lm1-6_test_residuals.json"
+model_path: "/work/bk1318/k202208/crai/hindcast-pp/data/cwb/rf_model.joblib"  # where to save the trained model
 var_name: "CWB"                                  # variable name in residual files
 predictor_vars: ["CWB"]                          # predictor variable names from hindcast files
 leave_out_years: [2010, 2011, 2012, 2013, 2014]  # years to leave out for evaluation (5 years)
@@ -8,3 +9,7 @@ output_dir: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/dro
 n_estimators: 20
 random_state: 0
 chunk_size: 10
+plot_dir: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/eval_results/cwb/qm_rf/qm_plots"                # where distribution PNGs will be written
+n_quantiles: 20
+bins: 50                                      # histogram bin count
+show: false                                   # True to show plots interactively

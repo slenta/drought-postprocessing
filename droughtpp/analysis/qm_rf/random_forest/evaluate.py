@@ -12,8 +12,13 @@ from joblib import load
 from sklearn.metrics import mean_squared_error, r2_score
 from tqdm import tqdm
 from IPython import embed
+import scipy.stats as sps
 
 from .rf_net import RandomForestBiasCorrector
+from droughtpp.analysis.qm_rf.spei_from_rf import (
+    combine_qm_and_residuals,
+    compute_spei_from_rf_corrected,
+)
 
 
 def collect_eval_set(
@@ -129,11 +134,24 @@ def save_predicted_residuals(
         ds_out["time"].attrs = ds["time"].attrs
 
         p = Path(fp)
-        out_base = Path(out_dir)
+        out_base = Path(f"{out_dir}/rf_residuals/")
         out_base.mkdir(parents=True, exist_ok=True)
-        out_path = out_base / f"{p.stem}{suffix}{p.suffix or '.nc'}"
-        embed()
+        spei_base = Path(f"{out_dir}/spei/")
+        spei_base.mkdir(parents=True, exist_ok=True)
 
+        out_path = f"{out_base}/{p.stem}{suffix}.nc"
+        spei_out_path = f"{spei_base}/{p.stem}_qm_rf_spei.nc"
+
+        # calculate spei and save to NetCDF
+        corrected_cwb = combine_qm_and_residuals(hind_da, pred_da, var_name="CWB")
+        spei = compute_spei_from_rf_corrected(
+            corrected_cwb, month_range=(6, 8), var_names=["CWB", "spei"], dist=sps.fisk
+        )
+
+        ds_spei = ds_out.copy()
+        ds_spei["spei"] = spei
+
+        ds_spei.to_netcdf(str(spei_out_path))
         ds_out.to_netcdf(str(out_path))
         ds.close()
         ds_out.close()
