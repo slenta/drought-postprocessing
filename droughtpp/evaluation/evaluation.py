@@ -11,316 +11,9 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import properscoring as ps
 
-from .netcdfchecker import reformat_dataset
-from .netcdfloader import load_steadymask
-from .normalizer import renormalize
-from .plotdata import plot_data
-from .. import config as cfg
 from tqdm import tqdm
 
 plt.rcParams.update({"font.size": 16})
-
-
-def create_snapshot_image(model, dataset, filename):
-    data_dict = {}
-    data_dict["image"], data_dict["mask"], data_dict["gt"], index = zip(
-        *[dataset[int(i)] for i in cfg.eval_timesteps]
-    )
-
-    for key in data_dict.keys():
-        data_dict[key] = torch.stack(data_dict[key]).to(cfg.device)
-
-    with torch.no_grad():
-        data_dict["output"] = model(data_dict["image"], data_dict["mask"])
-
-    data_dict["infilled"] = (
-        data_dict["mask"] * data_dict["image"]
-        + (1 - data_dict["mask"]) * data_dict["output"]
-    )
-
-    keys = list(data_dict.keys())
-    for key in keys:
-        data_dict[key] = data_dict[key].to(torch.device("cpu"))
-
-    # set mask
-    data_dict["mask"] = 1 - data_dict["mask"]
-    data_dict["image"] = np.ma.masked_array(data_dict["image"], data_dict["mask"])
-    data_dict["mask"] = np.ma.masked_array(data_dict["mask"], data_dict["mask"])
-
-    n_rows = sum([data_dict[key].shape[2] for key in keys])
-    n_cols = data_dict["image"].shape[0]
-
-    # plot and save data
-    fig, axes = plt.subplots(
-        nrows=n_rows, ncols=n_cols, figsize=(4 * n_cols, 4 * n_rows)
-    )
-    fig.patch.set_facecolor("black")
-
-    for j in range(n_cols):
-        axes[0, j].text(
-            0.4, 1, index[j], size=24, transform=axes[0, j].transAxes, color="white"
-        )
-
-    k = 0
-    for key in keys:
-        for c in range(data_dict[key].shape[2]):
-
-            if cfg.vlim is None:
-                vmin = data_dict[key][:, :, c, :, :].min().item()
-                vmax = data_dict[key][:, :, c, :, :].max().item()
-            else:
-                vmin = cfg.vlim[0]
-                vmax = cfg.vlim[1]
-
-            axes[k, 0].text(
-                -0.8,
-                0.5,
-                key
-                + " "
-                + str(c)
-                + "\n"
-                + "{:.3e}".format(vmin)
-                + "\n"
-                + "{:.3e}".format(vmax),
-                size=24,
-                va="center",
-                transform=axes[k, 0].transAxes,
-                color="white",
-            )
-
-            for j in range(n_cols):
-                axes[k, j].axis("off")
-                axes[k, j].imshow(
-                    np.squeeze(data_dict[key][j][cfg.recurrent_steps, c, :, :]),
-                    vmin=vmin,
-                    vmax=vmax,
-                )
-
-            k += 1
-
-    plt.subplots_adjust(wspace=0.012, hspace=0.012)
-    plt.savefig(filename + ".jpg", bbox_inches="tight", pad_inches=0)
-    plt.clf()
-    plt.close("all")
-
-
-def get_xr_dss(xr_dss_paths, data_types):
-    # get xrdss
-    xr_dss = []
-    for i, path in enumerate(xr_dss_paths):
-        print("Loading xarray dataset from {:s}".format(path))
-        ds = xr.load_dataset(path, decode_times=True)
-
-        # Adjust the depth dimension for both ds and ds1
-        # ds = ds.isel(depth=slice(0, cfg.out_channels))
-        ds1 = ds.copy()
-
-        # ds = ds.drop_vars(data_types[i])
-        dims = ds1[data_types[i]].dims
-        coords = {
-            key: ds1[data_types[i]].coords[key]
-            for key in ds1[data_types[i]].coords
-            if key != "time"
-        }
-        ds1 = ds1.drop_vars(ds1.keys())
-        ds1 = ds1.drop_dims("time")
-        ds1 = ds1.drop_dims("depth") if "depth" in ds1.dims else ds1
-        ds1 = ds1.drop_dims("height") if "height" in ds1.dims else ds1
-        xr_dss.append([ds, ds1, dims, coords])
-    return xr_dss
-
-
-def get_batch_size(parameters, n_samples, image_sizes):
-    if cfg.maxmem is None:
-        partitions = cfg.partitions
-    else:
-        model_size = 0
-        for parameter in parameters:
-            model_size += sys.getsizeof(parameter.storage())
-        model_size = 3.5 * n_samples * model_size / 1e6
-        data_size = (
-            4 * n_samples * np.sum([np.prod(size) for size in image_sizes]) * 5 / 1e6
-        )
-        partitions = int(np.ceil((model_size + data_size) / cfg.maxmem))
-
-    if partitions > n_samples:
-        partitions = n_samples
-
-    if partitions != 1:
-        print("The data will be split in {} partitions...".format(partitions))
-
-    return int(np.ceil(n_samples / partitions))
-
-
-def infill(model, dataset, eval_path, output_names, data_stats, xr_dss, i_model):
-    if not os.path.exists(cfg.evaluation_dirs[0]):
-        os.makedirs("{:s}".format(cfg.evaluation_dirs[0]))
-
-    steady_mask = load_steadymask(
-        cfg.mask_dir, cfg.steady_masks, cfg.data_types, cfg.device
-    )
-
-    data_dict = {"image": [], "mask": [], "gt": [], "output": [], "infilled": []}
-
-    for split in tqdm(range(dataset.__len__())):
-        # TODO: implement evaluation for multiple data paths
-        data_dict["image"], data_dict["mask"], data_dict["gt"], index = next(dataset)
-
-        if split == 0 and cfg.create_graph:
-            writer = SummaryWriter(log_dir=cfg.log_dir)
-            writer.add_graph(model, [data_dict["image"], data_dict["mask"]])
-            writer.close()
-
-        # get results from trained network
-        with torch.no_grad():
-            data_dict["output"] = model(
-                data_dict["image"].to(cfg.device), data_dict["mask"].to(cfg.device)
-            )
-
-        # Choose time step, if lstm applied?
-        for key in ("image", "mask", "gt", "output"):
-            data_dict[key] = data_dict[key][:, cfg.recurrent_steps, :, :, :].to(
-                torch.device("cpu")
-            )
-
-        # Question: If different data types/depth levels are used --> same channel everywhere?
-        for key in ("image", "mask", "gt"):
-            data_dict[key] = data_dict[key][:, cfg.gt_channels, :, :]
-
-        if steady_mask is not None:
-            for key in ("image", "gt", "output"):
-                data_dict[key][:, :, steady_mask.type(torch.bool)] = np.nan
-
-        data_dict["infilled"] = 1 - data_dict["mask"]
-        data_dict["infilled"] *= data_dict["output"]
-        data_dict["infilled"] += data_dict["mask"] * data_dict["image"]
-
-        data_dict["image"] /= data_dict["mask"]
-
-        create_outputs(
-            data_dict,
-            eval_path,
-            output_names,
-            data_stats,
-            xr_dss,
-            i_model,
-            split,
-            index,
-        )
-
-        if cfg.progress_fwd is not None:
-            cfg.progress_fwd[0](
-                "Infilling...",
-                int(
-                    cfg.progress_fwd[2]
-                    * (cfg.progress_fwd[1] + (split + 1) / dataset.__len__())
-                ),
-            )
-
-    return output_names
-
-
-def create_outputs(
-    data_dict,
-    eval_path,
-    output_names,
-    data_stats,
-    xr_dss,
-    i_model,
-    split,
-    index,
-    ds_index=0,
-):
-
-    m_label = "." + str(i_model)
-    suffix = m_label + "-" + str(split + 1)
-
-    if cfg.n_target_data == 0:
-        cnames = ["gt", "mask", "image", "output", "infilled"]
-        pnames = ["image", "infilled"]
-    else:
-        cnames = ["gt", "output"]
-        pnames = ["gt", "output"]
-
-    split_data = []
-    for cname in cnames:
-
-        if cfg.normalize_data and cname != "mask":
-            for k in range(data_dict[cname].shape[1]):
-                data_dict[cname][:, k, :, :] = renormalize(
-                    data_dict[cname][:, k, :, :],
-                    data_stats["mean"][k],
-                    data_stats["std"][k],
-                )
-
-        # Split data_dict[cname] along axis 0
-        split_arrays = np.array_split(
-            data_dict[cname].squeeze().to(torch.device("cpu")).detach().numpy(),
-            len(eval_path),
-            axis=0,
-        )
-        split_data.append(split_arrays)
-
-    for j in range(len(eval_path)):
-
-        if len(cfg.data_types) > 1:
-            i_data = -cfg.n_target_data + j
-        else:
-            i_data = 0
-        data_type = cfg.data_types[i_data]
-
-        for c, cname in enumerate(cnames):
-            rootname = f"{eval_path[j]}_ly{cfg.lead_year}_{cname}"
-            if rootname not in output_names:
-                output_names[rootname] = {}
-
-            if i_model not in output_names[rootname]:
-                output_names[rootname][i_model] = []
-
-            output_names[rootname][i_model] += [rootname + suffix + ".nc"]
-
-            ds = xr_dss[i_data][1].copy()
-
-            ds[data_type] = xr.DataArray(
-                split_data[c][j],
-                dims=xr_dss[i_data][2],
-                coords=xr_dss[i_data][3],
-            )
-            ds["time"] = xr_dss[i_data][0]["time"]
-
-            ds = reformat_dataset(
-                xr_dss[i_data][0], ds, data_type, format_name=cfg.eval_format
-            )
-            # for var in xr_dss[i_data][0].keys():
-            #     if "time" in xr_dss[i_data][0][var].dims:
-            #         ds[var] = xr_dss[i_data][0][var].isel(time=index)
-            #     else:
-            #         ds[var] = xr_dss[i_data][0][var]
-
-            ds.attrs["history"] = (
-                "Infilled using CRAI (Climate Reconstruction AI: "
-                "https://github.com/FREVA-CLINT/climatereconstructionAI)\n"
-                + ds.attrs["history"]
-            )
-            ds.to_netcdf(output_names[rootname][i_model][-1])
-
-        for time_step in cfg.plot_results:
-            if time_step in index:
-                output_name = "{}_{}{}_{}.png".format(
-                    eval_path[j], "combined", m_label, time_step
-                )
-                plot_data(
-                    xr_dss[i_data][1].coords,
-                    [
-                        data_dict[p][time_step - index[0], j, :, :].squeeze()
-                        for p in pnames
-                    ],
-                    ["Original", "Reconstructed"],
-                    output_name,
-                    data_type,
-                    str(xr_dss[i_data][0]["time"][time_step].values),
-                    *cfg.dataset_format["scale"],
-                )
 
 
 def crps_ensemble_grid(ensemble, reference):
@@ -403,11 +96,109 @@ def mae_per_member_grid(ensemble, reference):
     return mae
 
 
+def rmse_per_member_grid(ensemble, reference):
+    """
+    Compute RMSE per ensemble member and grid cell.
+
+    Expects:
+      - ensemble: shape (time, ensemble, lat, lon)
+      - reference: shape (time, lat, lon)
+
+    Returns:
+      - np.ndarray shape (ensemble, lat, lon) with root mean squared error over time.
+    """
+    # convert torch tensors to numpy
+    if hasattr(ensemble, "detach"):
+        ensemble = ensemble.detach().cpu().numpy()
+    if hasattr(reference, "detach"):
+        reference = reference.detach().cpu().numpy()
+    ensemble = np.asarray(ensemble)
+    reference = np.asarray(reference)
+
+    ntime, nmem, nlat, nlon = ensemble.shape
+
+    # Broadcast reference to (time, ensemble, lat, lon) and compute squared error
+    sq_err = (ensemble - reference[:, None, :, :]) ** 2  # (time, mem, lat, lon)
+
+    # RMSE over time, ignoring NaNs
+    rmse = np.sqrt(np.nanmean(sq_err, axis=0))  # (mem, lat, lon)
+
+    return rmse
+
+
+def mean_bias_per_member_grid(ensemble, reference):
+    """
+    Compute mean bias per ensemble member and grid cell.
+
+    Bias is defined as forecast minus reference. Positive values indicate overestimation.
+
+    Expects:
+      - ensemble: shape (time, ensemble, lat, lon)
+      - reference: shape (time, lat, lon)
+
+    Returns:
+      - np.ndarray shape (ensemble, lat, lon) with mean signed bias over time.
+    """
+    # convert torch tensors to numpy
+    if hasattr(ensemble, "detach"):
+        ensemble = ensemble.detach().cpu().numpy()
+    if hasattr(reference, "detach"):
+        reference = reference.detach().cpu().numpy()
+    ensemble = np.asarray(ensemble)
+    reference = np.asarray(reference)
+
+    ntime, nmem, nlat, nlon = ensemble.shape
+
+    # Broadcast reference and compute signed error
+    bias = ensemble - reference[:, None, :, :]  # (time, mem, lat, lon)
+
+    # Mean bias over time, ignoring NaNs
+    mean_bias = np.nanmean(bias, axis=0)  # (mem, lat, lon)
+
+    return mean_bias
+
+
+def brier_score_grid(ensemble, reference, std_multiplier=1.0, extreme_type="upper"):
+    """
+    Compute Brier Score per grid cell from an ensemble and reference.
+
+    Args:
+        ensemble: np.ndarray shape (time, ensemble, lat, lon)
+        reference: np.ndarray shape (time, lat, lon)
+        std_multiplier: threshold = mean + std_multiplier * std
+        extreme_type: "upper" for values above threshold, "lower" for values below threshold
+
+    Returns:
+        np.ndarray shape (lat, lon) - Brier Score values
+    """
+    # compute a threshold per grid cell from reference climatology
+    # here: mean + std_multiplier * std (e.g., std_multiplier=1 => > mean+1*std)
+    ref_mean = np.nanmean(reference, axis=0)  # (lat, lon)
+    ref_std = np.nanstd(reference, axis=0)
+    threshold = ref_mean + std_multiplier * ref_std  # (lat, lon)
+
+    # observed binary time series: 1 when reference exceeds (or falls below) threshold, else 0
+    if extreme_type == "upper":
+        obs = (reference > threshold[None, :, :]).astype(float)  # (time, lat, lon)
+        p = np.mean(ensemble > threshold[None, None, :, :], axis=1)  # (time, lat, lon)
+    elif extreme_type == "lower":
+        obs = (reference < threshold[None, :, :]).astype(float)  # (time, lat, lon)
+        p = np.mean(ensemble < threshold[None, None, :, :], axis=1)  # (time, lat, lon)
+
+    # probabilistic forecast: fraction of ensemble members above/below threshold
+
+    # Brier Score per grid cell: mean over time of (p - o)^2
+    # Lower BS is better (0 = perfect).
+    bs = np.nanmean((p - obs) ** 2, axis=0)  # (lat, lon)
+    return bs
+
+
 def brier_skill_score_between_ensembles(
     ens_a,
     ens_b,
     reference,
     std_multiplier=1.0,
+    extreme_type="upper",
 ):
     """
     Compute Brier Skill Score (BSS) per grid cell comparing two ensembles.
@@ -415,6 +206,9 @@ def brier_skill_score_between_ensembles(
     Assumes shapes:
       - ens_a, ens_b: (time, ensemble, lat, lon)
       - reference: (time, lat, lon)
+
+    Args:
+        extreme_type: "upper" for upper tail extremes, "lower" for lower tail extremes
 
     Returns:
       - bss: np.ndarray shape (lat, lon)
@@ -433,34 +227,13 @@ def brier_skill_score_between_ensembles(
     ens_b = np.asarray(ens_b)
     reference = np.asarray(reference)
 
-    # basic shape checks
-    if ens_a.ndim != 4 or ens_b.ndim != 4:
-        raise ValueError("ens_a and ens_b must have shape (time, ensemble, lat, lon)")
-    if reference.ndim != 3:
-        raise ValueError("reference must have shape (time, lat, lon)")
-    if ens_a.shape[0] != reference.shape[0] or ens_b.shape[0] != reference.shape[0]:
-        raise ValueError("time dimension must match between ensembles and reference")
-    if ens_a.shape[2:] != ens_b.shape[2:] or ens_a.shape[2:] != reference.shape[1:]:
-        raise ValueError("spatial dimensions (lat, lon) must match for all inputs")
-
-    # compute a threshold per grid cell from reference climatology
-    # here: mean + std_multiplier * std (e.g., std_multiplier=1 => > mean+1*std)
-    ref_mean = np.nanmean(reference, axis=0)  # (lat, lon)
-    ref_std = np.nanstd(reference, axis=0)
-    threshold = ref_mean + std_multiplier * ref_std  # (lat, lon)
-
-    # observed binary time series: 1 when reference exceeds threshold, else 0
-    obs = (reference > threshold[None, :, :]).astype(float)  # (time, lat, lon)
-
-    # probabilistic forecasts: fraction of ensemble members exceeding threshold
-    # broadcasting: threshold[None, None, :, :] matches (time, ensemble, lat, lon)
-    p_a = np.mean(ens_a > threshold[None, None, :, :], axis=1)  # (time, lat, lon)
-    p_b = np.mean(ens_b > threshold[None, None, :, :], axis=1)  # (time, lat, lon)
-
-    # Brier Score (BS) per grid cell: mean over time of (p - o)^2
-    # Lower BS is better (0 = perfect).
-    bs_a = np.nanmean((p_a - obs) ** 2, axis=0)  # (lat, lon)
-    bs_b = np.nanmean((p_b - obs) ** 2, axis=0)  # (lat, lon)
+    # Compute Brier Scores using the shared function
+    bs_a = brier_score_grid(
+        ens_a, reference, std_multiplier=std_multiplier, extreme_type=extreme_type
+    )
+    bs_b = brier_score_grid(
+        ens_b, reference, std_multiplier=std_multiplier, extreme_type=extreme_type
+    )
 
     # Brier Skill Score (BSS) comparing A to B:
     # BSS = 1 - BS_A / BS_B

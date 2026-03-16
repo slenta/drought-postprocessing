@@ -1,15 +1,44 @@
-hindcasts_json: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/data/train/cwb/dwd-hindcasts_lm1-6_test.json"
-reference_data: "/work/bk1318/k202208/crai/hindcast-pp/data/spei/cwb/era5/era5-tamsat_cwb_remapped_invlat.nc"
-residuals_json: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/data/train/cwb/dwd-hindcasts_lm1-6_test_residuals.json"
-model_path: "/work/bk1318/k202208/crai/hindcast-pp/data/cwb/rf_model.joblib"  # where to save the trained model
-var_name: "CWB"                                  # variable name in residual files
-predictor_vars: ["CWB"]                          # predictor variable names from hindcast files
-leave_out_years: [2010, 2011, 2012, 2013, 2014]  # years to leave out for evaluation (5 years)
-output_dir: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/eval_results/cwb/qm_rf"                        # where to save model and metrics
+project_root: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing"
+external_data_root: "/work/bk1318/k202208/crai/hindcast-pp/data"
+
+experiment: "cwb"
+leadtime_tag: "lm1-6"
+
+hindcasts_json: "${project_root}/droughtpp/data/train/${experiment}/dwd-hindcasts_${leadtime_tag}_test.json"
+residuals_json: "${project_root}/droughtpp/data/train/${experiment}/dwd-hindcasts_${leadtime_tag}_test_residuals.json"
+
+reference_data: "${external_data_root}/spei/${experiment}/era5/era5-tamsat_cwb_remapped_invlat.nc"
+reference: "${reference_data}"
+
+output_dir: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf"
+model_path: "${external_data_root}/${experiment}/rf_model.joblib"
+corrected_spei_paths_json: "${output_dir}/corrected_spei_paths.json"
+
+var_name: "CWB"
+predictor_vars: ["CWB"]
+leave_out_years: [2010, 2011, 2012, 2013, 2014]
+
+evaluate_spei: true
+generate_corrected_spei: true
+spei_month_range: [1, 3]
+spei_std_multiplier: 1.0
+
+workflow:
+  run_qm: false
+  run_qm_eval: true
+  run_rf_train: false
+  run_rf_evaluate: true
+
+data_dir: "${external_data_root}/spei/"
+input_dir: "${project_root}/droughtpp/data/"
+spei_json: null
+
 n_estimators: 20
 random_state: 0
 chunk_size: 10
-plot_dir: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/eval_results/cwb/qm_rf/qm_plots"                # where distribution PNGs will be written
+
+plot_dir: "${output_dir}/qm_plots"
+qm_output_dir: "${output_dir}/qm_outputs"
 n_quantiles: 20
-bins: 50                                      # histogram bin count
-show: false                                   # True to show plots interactively
+bins: 50
+show: false

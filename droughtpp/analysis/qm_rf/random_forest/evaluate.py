@@ -1,8 +1,6 @@
 import json
-import argparse
 from pathlib import Path
 from typing import List
-import os
 
 import yaml
 import numpy as np
@@ -11,10 +9,11 @@ import xarray as xr
 from joblib import load
 from sklearn.metrics import mean_squared_error, r2_score
 from tqdm import tqdm
-from IPython import embed
 import scipy.stats as sps
 
 from .rf_net import RandomForestBiasCorrector
+from ..config_loader import load_qm_rf_config
+from droughtpp.analysis.qm_rf.spei_evaluation import evaluate_spei
 from droughtpp.analysis.qm_rf.spei_from_rf import (
     combine_qm_and_residuals,
     compute_spei_from_rf_corrected,
@@ -89,11 +88,20 @@ def save_predicted_residuals(
     predictor_vars: List[str],
     eval_years: List[int] = [],
     out_dir: Path = None,
+    spei_paths_json: Path = None,
     suffix: str = "_qm_rf_residuals",
 ):
-    """Predict residuals per hindcast file and save as NetCDF with added variable <var_name>_qm_rf_residual."""
+    if out_dir is None:
+        raise ValueError("out_dir must be provided to save_predicted_residuals().")
+
     with open(hindcasts_json, "r") as fh:
         hindcasts = json.load(fh)
+
+    if spei_paths_json is None:
+        spei_paths_json = Path(out_dir) / "corrected_spei_paths.json"
+
+    spei_paths = []
+    spei_paths_json.parent.mkdir(parents=True, exist_ok=True)
 
     for fp in tqdm(hindcasts, desc="Saving RF residuals"):
         fp = str(fp)
@@ -143,9 +151,11 @@ def save_predicted_residuals(
         spei_out_path = f"{spei_base}/{p.stem}_qm_rf_spei.nc"
 
         # calculate spei and save to NetCDF
-        corrected_cwb = combine_qm_and_residuals(hind_da, pred_da, var_name="CWB")
+        corrected_cwb = combine_qm_and_residuals(
+            hind_da, pred_da, var_name="CWB"
+        ).squeeze()
         spei = compute_spei_from_rf_corrected(
-            corrected_cwb, month_range=(6, 8), var_names=["CWB", "spei"], dist=sps.fisk
+            corrected_cwb, month_range=(1, 3), var_names=["CWB", "spei"], dist=sps.fisk
         )
 
         ds_spei = ds_out.copy()
@@ -153,13 +163,23 @@ def save_predicted_residuals(
 
         ds_spei.to_netcdf(str(spei_out_path))
         ds_out.to_netcdf(str(out_path))
+        spei_paths.append(str(Path(spei_out_path)))
         ds.close()
         ds_out.close()
 
+    with open(spei_paths_json, "w") as fh:
+        json.dump(spei_paths, fh, indent=2)
 
-def evaluate(config_path: Path):
-    with open(config_path, "r") as fh:
-        cfg = yaml.safe_load(fh)
+    return spei_paths_json
+
+
+def evaluate(config_path: Path | None = None, config_overrides=None):
+    default_cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    cfg = load_qm_rf_config(
+        config_path,
+        overrides=config_overrides,
+        default_config=default_cfg_path,
+    )
 
     residuals_json = Path(cfg["residuals_json"])
     hindcasts_json = Path(cfg["hindcasts_json"])
@@ -168,14 +188,15 @@ def evaluate(config_path: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     model_path = Path(cfg.get("model_path", str(out_dir / "rf_model.joblib")))
-    var_name = cfg.get("var_name", "tas")
+    var_name = cfg.get("var_name")
     predictor_vars = cfg.get("predictor_vars", [var_name])
     eval_years = cfg.get("leave_out_years", [])
+    evaluate_spei_flag = cfg.get("evaluate_spei", str(var_name).lower() == "cwb")
+    generate_corrected_spei = cfg.get("generate_corrected_spei", True)
 
     X_eval, y_eval = collect_eval_set(
         residuals_json, hindcasts_json, var_name, predictor_vars, eval_years
     )
-    print(X_eval.shape, y_eval.shape)
 
     model = load(model_path)
 
@@ -186,9 +207,43 @@ def evaluate(config_path: Path):
     metrics = {"rmse": rmse, "r2": r2, "n_eval_samples": int(len(y_eval))}
 
     # save predicted residuals per-file (same structure as input hindcasts)
-    save_predicted_residuals(
-        model, hindcasts_json, var_name, predictor_vars, eval_years, out_dir=out_dir
+
+    spei_paths_json = Path(
+        cfg.get("corrected_spei_paths_json", str(out_dir / "corrected_spei_paths.json"))
     )
+
+    if generate_corrected_spei:
+        spei_paths_json = save_predicted_residuals(
+            model,
+            hindcasts_json,
+            var_name,
+            predictor_vars,
+            eval_years,
+            out_dir=out_dir,
+            spei_paths_json=spei_paths_json,
+        )
+
+    if evaluate_spei_flag:
+        if not spei_paths_json.exists():
+            raise FileNotFoundError(
+                f"SPEI paths JSON not found: {spei_paths_json}. "
+                "Run once with generate_corrected_spei=true or provide an existing corrected_spei_paths_json."
+            )
+
+        with open(spei_paths_json, "r") as fh:
+            corrected_spei_paths = json.load(fh)
+
+        spei_metrics = evaluate_spei(
+            corrected_spei_paths=corrected_spei_paths,
+            hindcasts_json=hindcasts_json,
+            reference_data=Path(cfg["reference_data"]),
+            out_dir=out_dir,
+            surplus_var=var_name,
+            month_range=tuple(cfg.get("spei_month_range", [1, 3])),
+            eval_years=eval_years,
+            std_multiplier=float(cfg.get("spei_std_multiplier", 1.0)),
+        )
+        metrics.update(spei_metrics)
 
     metrics_path = out_dir / "evaluation_metrics.yaml"
     with open(metrics_path, "w") as fh:
@@ -199,13 +254,4 @@ def evaluate(config_path: Path):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate trained RF on QM residuals.")
-    parser.add_argument(
-        "--config",
-        "-c",
-        type=str,
-        default="train_config.yaml",
-        help="Path to config YAML",
-    )
-    args = parser.parse_args()
-    evaluate(Path(args.config))
+    evaluate()

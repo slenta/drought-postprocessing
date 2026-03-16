@@ -1,11 +1,11 @@
 from pathlib import Path
 from typing import Optional
 
-import yaml
 import json
 import tempfile
 
 # relative imports within the package
+from .config_loader import load_qm_rf_config
 from .quantile_mapping.quantile_mapping import quantile_map_json
 from .random_forest.evaluate import evaluate as rf_evaluate
 from .random_forest.train import train as rf_train
@@ -13,9 +13,12 @@ from .quantile_mapping.qm_evaluate import run_qm_evaluation
 
 
 def run_qm_then_rf(
-    config_path: str,
+    config_path: str | None = None,
     train_rf: bool = False,
+    qm_run: bool = False,
     qm_eval: bool = True,
+    run_rf_evaluate: bool = True,
+    config_overrides=None,
 ):
     """
     Run additive quantile mapping for all hindcasts listed in hindcasts_json (or taken from the RF config),
@@ -25,7 +28,12 @@ def run_qm_then_rf(
     - config_path: path to RF training YAML config
     """
     # load RF/config YAML and allow it to supply QM inputs
-    cfg = yaml.safe_load(Path(config_path).read_text())
+    default_cfg_path = Path(__file__).resolve().parent / "config.yaml"
+    cfg = load_qm_rf_config(
+        config_path,
+        overrides=config_overrides,
+        default_config=default_cfg_path,
+    )
 
     tmp_json_path = None
 
@@ -44,37 +52,42 @@ def run_qm_then_rf(
         Path(qm_output).mkdir(parents=True, exist_ok=True)
 
     # run quantile mapping (use or omit output_path depending on availability)
-    # quantile_map_json(
-    #     str(qm_json_path),
-    #     ref_path=ref_path,
-    #     var_name=qm_var,
-    #     out_dir=str(qm_output),
-    #     n_quantiles=n_quantiles,
-    # )
+    if qm_run:
+        quantile_map_json(
+            str(qm_json_path),
+            ref_path=ref_path,
+            var_name=qm_var,
+            out_dir=str(qm_output),
+            n_quantiles=n_quantiles,
+        )
 
-    # if qm_eval:
-    #     run_qm_evaluation(
-    #         json_list_path=str(qm_json_path),
-    #         ref_path=str(ref_path),
-    #         var_name=qm_var,
-    #         qm_out_dir=str(qm_output),
-    #         plot_dir=str(plot_dir),
-    #         n_quantiles=n_quantiles,
-    #     )
+    if qm_eval:
+        run_qm_evaluation(
+            json_list_path=str(qm_json_path),
+            ref_path=str(ref_path),
+            var_name=qm_var,
+            qm_out_dir=str(qm_output),
+            plot_dir=str(plot_dir),
+            n_quantiles=n_quantiles,
+        )
 
-    # 2) run RF evaluation and train if given
+    # run RF training and evaluation if requested
     if train_rf:
-        rf_train(Path(config_path))
+        rf_train(config_path, config_overrides=config_overrides)
 
-    rf_evaluate(Path(config_path))
+    if run_rf_evaluate:
+        rf_evaluate(config_path, config_overrides=config_overrides)
 
 
 if __name__ == "__main__":
-    import argparse
+    default_cfg_path = Path(__file__).resolve().parent / "config.yaml"
+    cfg = load_qm_rf_config(None, default_config=default_cfg_path)
 
-    parser = argparse.ArgumentParser(
-        description="Run QM then RF workflow using a config YAML"
+    workflow = cfg.get("workflow", {})
+    run_qm_then_rf(
+        None,
+        train_rf=workflow.get("run_rf_train", False),
+        qm_run=workflow.get("run_qm", False),
+        qm_eval=workflow.get("run_qm_eval", True),
+        run_rf_evaluate=workflow.get("run_rf_evaluate", True),
     )
-    parser.add_argument("config", help="Path to RF/QM workflow YAML config")
-    args = parser.parse_args()
-    run_qm_then_rf(str(args.config), train_rf=False)

@@ -1,9 +1,7 @@
 import json
-import argparse
 from pathlib import Path
 from typing import List
 
-import yaml
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -12,6 +10,7 @@ from sklearn.ensemble import RandomForestRegressor
 from IPython import embed
 
 from .rf_net import RandomForestBiasCorrector
+from ..config_loader import load_qm_rf_config
 
 
 def collect_train_sets(
@@ -72,9 +71,13 @@ def collect_train_sets(
     return X, y
 
 
-def train(config_path: Path):
-    with open(config_path, "r") as fh:
-        cfg = yaml.safe_load(fh)
+def train(config_path: Path | None = None, config_overrides=None):
+    default_cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    cfg = load_qm_rf_config(
+        config_path,
+        overrides=config_overrides,
+        default_config=default_cfg_path,
+    )
 
     residuals_json = Path(cfg["residuals_json"])
     hindcasts_json = Path(cfg["hindcasts_json"])
@@ -106,15 +109,4 @@ def train(config_path: Path):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Train RF bias-corrector on QM residuals."
-    )
-    parser.add_argument(
-        "--config",
-        "-c",
-        type=str,
-        default="train_config.yaml",
-        help="Path to training config YAML",
-    )
-    args = parser.parse_args()
-    train(Path(args.config))
+    train()
