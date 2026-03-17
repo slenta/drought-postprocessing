@@ -13,6 +13,9 @@ reference: "${reference_data}"
 output_dir: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf"
 model_path: "${external_data_root}/${experiment}/rf_model.joblib"
 corrected_spei_paths_json: "${output_dir}/corrected_spei_paths.json"
+hindcasts_spei_json: "${output_dir}/data/spei/original_hindcasts_spei_paths.json"
+qm_hindcasts_spei_json: "${output_dir}/data/spei/qm_hindcasts_spei_paths.json"
+reference_spei_json: "${output_dir}/data/spei/reference_spei_paths.json"
 
 var_name: "CWB"
 predictor_vars: ["CWB"]
@@ -37,8 +40,9 @@ n_estimators: 20
 random_state: 0
 chunk_size: 10
 
-plot_dir: "${output_dir}/qm_plots"
+plot_dir: "${output_dir}/"
 qm_output_dir: "${output_dir}/qm_outputs"
+qm_json_path: "${output_dir}/data/qm_hindcast_paths.json"
 n_quantiles: 20
 bins: 50
 show: false

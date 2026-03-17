@@ -8,7 +8,12 @@ from tqdm import tqdm
 
 
 def compute_qm_distributions(
-    json_list_path, ref_path, var_name, qm_out_dir=None, align_time=True
+    json_list_path,
+    ref_path,
+    var_name,
+    qm_json_path=None,
+    qm_out_dir=None,
+    align_time=True,
 ):
     """
     For each hindcast file listed in json_list_path collect flattened numpy arrays:
@@ -18,19 +23,23 @@ def compute_qm_distributions(
 
     Returns a dict keyed by file-stem -> dict with keys: orig, qm, obs, file, qm_file
     """
+
     with open(json_list_path, "r") as fh:
         files = json.load(fh)
+    with open(qm_json_path, "r") as fh:
+        qm_files = json.load(fh)
 
     ds_obs = xr.open_dataset(ref_path)
     obs_da = ds_obs[var_name]
 
     out = {}
-    for fp in tqdm(files, desc="Collecting distributions"):
+    for fp, qm_fp in tqdm(
+        list(zip(files, qm_files)),
+        desc="Collecting distributions",
+    ):
         p = Path(fp)
-        base, ext = p.stem, p.suffix
-
-        # find QM file (prefer qm_out_dir if given)
-        qm_path = Path(qm_out_dir) / f"{base}_qm{ext}"
+        base = p.stem
+        qm_path = Path(qm_fp)
 
         ds = xr.open_dataset(fp)
         ds_qm = xr.open_dataset(qm_path)

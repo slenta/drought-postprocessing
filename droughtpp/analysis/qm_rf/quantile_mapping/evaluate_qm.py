@@ -5,8 +5,8 @@ import numpy as np
 import xarray as xr
 from tqdm import tqdm
 
-from ..evaluation import compute_qm_distributions
-from ..visualization import (
+from ..utils.evaluation import compute_qm_distributions
+from ..utils.visualization import (
     plot_qm_distributions,
     plot_mae_skill_metrics,
     plot_bss_skill_metrics,
@@ -22,6 +22,7 @@ from droughtpp.evaluation.evaluation import (
 
 def run_qm_evaluation(
     json_list_path,
+    qm_json_path,
     ref_path,
     var_name="tas",
     qm_out_dir=None,
@@ -32,18 +33,32 @@ def run_qm_evaluation(
     High-level helper: compute distributions, plot, and compare QM vs. original hindcasts.
     """
     dists = compute_qm_distributions(
-        json_list_path, ref_path, var_name, qm_out_dir=qm_out_dir
+        json_list_path,
+        ref_path,
+        var_name,
+        qm_json_path=qm_json_path,
+        qm_out_dir=qm_out_dir,
     )
     plot_qm_distributions(dists, var_name, out_dir=plot_dir, n_quantiles=n_quantiles)
 
     # Compute BSS and MAE for QM vs. original hindcasts
     compute_qm_skill_metrics(
-        json_list_path, ref_path, var_name, qm_out_dir=qm_out_dir, plot_dir=plot_dir
+        json_list_path,
+        qm_json_path,
+        ref_path,
+        var_name,
+        qm_out_dir=qm_out_dir,
+        plot_dir=plot_dir,
     )
 
 
 def compute_qm_skill_metrics(
-    json_list_path, ref_path, var_name="tas", qm_out_dir=None, plot_dir="qm_plots"
+    json_list_path,
+    qm_json_path,
+    ref_path,
+    var_name="tas",
+    qm_out_dir=None,
+    plot_dir="qm_plots",
 ):
     """
     Compute skill metrics (BSS, MAE, RMSE, mean bias) comparing
@@ -52,6 +67,8 @@ def compute_qm_skill_metrics(
     """
     with open(json_list_path, "r") as fh:
         files = json.load(fh)
+    with open(qm_json_path, "r") as fh:
+        qm_files = json.load(fh)
 
     def _normalize_time_to_date(da):
         return da.assign_coords(time=da["time"].values.astype("datetime64[D]"))
@@ -64,16 +81,18 @@ def compute_qm_skill_metrics(
     original_ensemble = []
     qm_ensemble = []
 
-    for fp in tqdm(files, desc="Loading hindcasts for skill metrics"):
+    for fp, qm_fp in tqdm(
+        list(zip(files, qm_files)),
+        desc="Loading hindcasts for skill metrics",
+    ):
         p = Path(fp)
-        base = p.stem
 
         # Load original hindcast
         ds_orig = xr.open_dataset(fp)
         orig_da = _normalize_time_to_date(ds_orig[var_name])
 
         # Load QM hindcast
-        qm_path = Path(qm_out_dir) / f"{base}_qm{p.suffix}"
+        qm_path = Path(qm_fp)
         ds_qm = xr.open_dataset(qm_path)
         qm_da = _normalize_time_to_date(ds_qm[var_name])
 
@@ -103,7 +122,6 @@ def compute_qm_skill_metrics(
     )  # (time, ensemble, lat, lon)
 
     # Compute MAE
-    print(original_ensemble.shape, qm_ensemble.shape, reference.shape)
     mae_orig = mae_per_member_grid(original_ensemble, reference)
     mae_qm = mae_per_member_grid(qm_ensemble, reference)
 
@@ -182,10 +200,12 @@ if __name__ == "__main__":
     reference = cfg.get("reference", cfg.get("reference_data"))
     var = cfg.get("var_name", "tas")
     qm_out = cfg.get("qm_output_dir")
+    qm_json = cfg["qm_json_path"]
     plots_out = cfg.get("plot_dir")
 
     run_qm_evaluation(
         json_list,
+        qm_json,
         reference,
         var_name=var,
         qm_out_dir=qm_out,

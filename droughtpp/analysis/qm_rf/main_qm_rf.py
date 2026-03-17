@@ -6,10 +6,10 @@ import tempfile
 
 # relative imports within the package
 from .config_loader import load_qm_rf_config
-from .quantile_mapping.quantile_mapping import quantile_map_json
-from .random_forest.evaluate import evaluate as rf_evaluate
-from .random_forest.train import train as rf_train
-from .quantile_mapping.qm_evaluate import run_qm_evaluation
+from .quantile_mapping.model_qm import quantile_map_json
+from .random_forest.evaluate_rf import evaluate as rf_evaluate
+from .random_forest.train_rf import train as rf_train
+from .quantile_mapping.evaluate_qm import run_qm_evaluation
 
 
 def run_qm_then_rf(
@@ -37,8 +37,11 @@ def run_qm_then_rf(
 
     tmp_json_path = None
 
-    # determine JSON with hindcasts (config may contain a path or an inline list)
-    qm_json_path = Path(cfg["hindcasts_json"])
+    # determine input JSONs
+    hindcasts_json_path = Path(cfg["hindcasts_json"])
+    qm_files_json_path = cfg.get(
+        "qm_json_path", str(Path(cfg["output_dir"]) / "data" / "qm_hindcast_paths.json")
+    )
     ref_path = Path(cfg["reference_data"])
 
     # allow config to override var_name and output path for QM
@@ -54,16 +57,18 @@ def run_qm_then_rf(
     # run quantile mapping (use or omit output_path depending on availability)
     if qm_run:
         quantile_map_json(
-            str(qm_json_path),
+            str(hindcasts_json_path),
             ref_path=ref_path,
             var_name=qm_var,
             out_dir=str(qm_output),
             n_quantiles=n_quantiles,
+            qm_json_path=str(qm_files_json_path),
         )
 
     if qm_eval:
         run_qm_evaluation(
-            json_list_path=str(qm_json_path),
+            json_list_path=str(hindcasts_json_path),
+            qm_json_path=str(qm_files_json_path),
             ref_path=str(ref_path),
             var_name=qm_var,
             qm_out_dir=str(qm_output),

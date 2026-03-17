@@ -11,10 +11,10 @@ from sklearn.metrics import mean_squared_error, r2_score
 from tqdm import tqdm
 import scipy.stats as sps
 
-from .rf_net import RandomForestBiasCorrector
+from .model_rf import RandomForestBiasCorrector
 from ..config_loader import load_qm_rf_config
-from droughtpp.analysis.qm_rf.spei_evaluation import evaluate_spei
-from droughtpp.analysis.qm_rf.spei_from_rf import (
+from droughtpp.analysis.qm_rf.utils.spei_evaluation import evaluate_spei
+from droughtpp.analysis.qm_rf.utils.spei_from_rf import (
     combine_qm_and_residuals,
     compute_spei_from_rf_corrected,
 )
@@ -144,7 +144,7 @@ def save_predicted_residuals(
         p = Path(fp)
         out_base = Path(f"{out_dir}/rf_residuals/")
         out_base.mkdir(parents=True, exist_ok=True)
-        spei_base = Path(f"{out_dir}/spei/")
+        spei_base = Path(f"{out_dir}/data/spei_corrected/")
         spei_base.mkdir(parents=True, exist_ok=True)
 
         out_path = f"{out_base}/{p.stem}{suffix}.nc"
@@ -191,7 +191,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     var_name = cfg.get("var_name")
     predictor_vars = cfg.get("predictor_vars", [var_name])
     eval_years = cfg.get("leave_out_years", [])
-    evaluate_spei_flag = cfg.get("evaluate_spei", str(var_name).lower() == "cwb")
+    evaluate_spei_flag = cfg.get("evaluate_spei", True)
     generate_corrected_spei = cfg.get("generate_corrected_spei", True)
 
     X_eval, y_eval = collect_eval_set(
@@ -224,33 +224,20 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
         )
 
     if evaluate_spei_flag:
-        if not spei_paths_json.exists():
-            raise FileNotFoundError(
-                f"SPEI paths JSON not found: {spei_paths_json}. "
-                "Run once with generate_corrected_spei=true or provide an existing corrected_spei_paths_json."
-            )
 
         with open(spei_paths_json, "r") as fh:
             corrected_spei_paths = json.load(fh)
 
-        spei_metrics = evaluate_spei(
+        plot_dir = cfg.get("plot_dir", str(out_dir / "qm_plots"))
+        evaluate_spei(
             corrected_spei_paths=corrected_spei_paths,
-            hindcasts_json=hindcasts_json,
-            reference_data=Path(cfg["reference_data"]),
+            hindcasts_spei_json=Path(cfg["hindcasts_spei_json"]),
+            reference_spei_json=Path(cfg["reference_spei_json"]),
             out_dir=out_dir,
-            surplus_var=var_name,
-            month_range=tuple(cfg.get("spei_month_range", [1, 3])),
             eval_years=eval_years,
             std_multiplier=float(cfg.get("spei_std_multiplier", 1.0)),
+            plot_dir=plot_dir,
         )
-        metrics.update(spei_metrics)
-
-    metrics_path = out_dir / "evaluation_metrics.yaml"
-    with open(metrics_path, "w") as fh:
-        yaml.safe_dump(metrics, fh)
-
-    print(f"Evaluation complete. Metrics saved to: {metrics_path}")
-    print(metrics)
 
 
 if __name__ == "__main__":

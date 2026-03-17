@@ -7,14 +7,28 @@ from cmethods import adjust
 
 
 def quantile_map_json(
-    json_list_path, ref_path, var_name, out_dir="evaluation", n_quantiles=250, kind="+"
+    json_list_path,
+    ref_path,
+    var_name,
+    out_dir="evaluation",
+    n_quantiles=250,
+    kind="+",
+    qm_json_path=None,
 ):
     """
     Apply quantile mapping (using cmethods.adjust) for var_name for each NetCDF
     file listed in json_list_path, using ref_path as the observation reference.
-    Saves outputs to out_dir with suffix _qm before the extension.
+    Saves quantile-mapped outputs to out_dir/data/qm_hindcast with suffix _qm
+    before the extension, and writes a JSON list of written QM files to
+    qm_json_path (or out_dir/data/qm_hindcast_paths.json if not provided).
     """
     os.makedirs(out_dir, exist_ok=True)
+    data_out_dir = os.path.join(out_dir, "data")
+    qm_hindcast_out_dir = os.path.join(data_out_dir, "qm_hindcast")
+    os.makedirs(data_out_dir, exist_ok=True)
+    os.makedirs(qm_hindcast_out_dir, exist_ok=True)
+
+    qm_hindcast_paths = []
     with open(json_list_path, "r") as f:
         files = json.load(f)
 
@@ -43,8 +57,9 @@ def quantile_map_json(
         ds_out = ds.copy()
         ds_out[var_name] = adjusted[var_name]
         base, ext = os.path.splitext(os.path.basename(fp))
-        out_path = os.path.join(out_dir, f"{base}_qm{ext}")
+        out_path = os.path.join(qm_hindcast_out_dir, f"{base}_qm{ext}")
         ds_out.to_netcdf(out_path)
+        qm_hindcast_paths.append(out_path)
 
         # compute residuals (original minus adjusted) and save separately
         residual = ds[var_name] - adjusted[var_name]
@@ -57,4 +72,11 @@ def quantile_map_json(
         ds.close()
         ds_out.close()
 
+    qm_hindcast_paths_json = str(qm_json_path)
+    os.makedirs(os.path.dirname(qm_hindcast_paths_json), exist_ok=True)
+
+    with open(qm_hindcast_paths_json, "w") as fh:
+        json.dump(qm_hindcast_paths, fh, indent=2)
+
     ds_obs.close()
+    return qm_hindcast_paths_json

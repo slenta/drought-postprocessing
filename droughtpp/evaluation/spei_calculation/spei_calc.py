@@ -16,6 +16,8 @@ Usage:
 
 # Set thread limits BEFORE importing numpy/scipy
 import os
+import json
+from pathlib import Path
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -27,8 +29,9 @@ import pandas as pd
 import xarray as xr
 import scipy.stats as sps
 import spei as si
-from IPython import embed
 from tqdm import tqdm
+
+from droughtpp.analysis.qm_rf.config_loader import load_qm_rf_config
 
 
 def compute_spei_from_surplus(
@@ -173,44 +176,128 @@ def compute_spei_from_surplus(
     return spei_out
 
 
-if __name__ == "__main__":
-    # ========== CONFIGURATION ==========
-    # Edit these variables directly when running the script
+def _ensure_spatial_dims(data_array: xr.DataArray) -> xr.DataArray:
+    rename_map = {}
+    if "lat" in data_array.dims:
+        rename_map["lat"] = "latitude"
+    if "lon" in data_array.dims:
+        rename_map["lon"] = "longitude"
+    if rename_map:
+        data_array = data_array.rename(rename_map)
+    return data_array
 
-    input_file = "/work/bk1318/k202208/crai/hindcast-pp/data/spei/cwb/era5/era5-tamsat_cwb_remapped_invlat.nc"  # Path to input NetCDF file containing surplus (P - PET)
-    output_file = "/work/bk1318/k202208/crai/hindcast-pp/data/spei/era5/cwb/era5-tamsat_spei-exponweib_remapped_invlat.nc"  # Path to output NetCDF file for SPEI
-    month_range = (
-        1,
-        3,
-    )  # 1-based inclusive month indices within each year to aggregate (e.g., (1,3))
-    var_names = ["CWB", "spei"]  # Variable name for for input and output SPEI
-    distribution = (
-        sps.exponweib
-    )  # Distribution for SPEI standardization (e.g., sps.fisk, sps.gamma, sps.norm)
 
-    # ===================================
+def _compute_and_save_spei(
+    input_path: Path,
+    output_path: Path,
+    input_var: str,
+    output_var: str,
+    month_range: tuple,
+    dist,
+) -> str:
+    with xr.open_dataset(input_path) as ds:
+        surplus = ds[input_var].load().squeeze()
 
-    print(f"Computing SPEI using month_range={month_range} per year")
-    print(f"Input file: {input_file}")
-    print(f"Output file: {output_file}")
+    surplus = _ensure_spatial_dims(surplus)
 
-    # Load surplus data
-    surplus = xr.open_dataset(input_file)[var_names[0]].squeeze()
-
-    # Validate dimensions
-    required_dims = {"time", "latitude", "longitude"}
-    if not required_dims.issubset(set(surplus.dims)):
-        raise ValueError(
-            f"Input data must have dimensions {required_dims}, "
-            f"but found {set(surplus.dims)}"
-        )
-
-    # Compute SPEI from surplus
     spei = compute_spei_from_surplus(
-        surplus, month_range=month_range, var_names=var_names, dist=distribution
+        surplus,
+        month_range=month_range,
+        var_names=[input_var, output_var],
+        dist=dist,
     )
 
-    # Save output
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    spei.to_netcdf(output_file)
-    print(f"SPEI computation complete. Saved to {output_file}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    spei.to_netcdf(output_path)
+    return str(output_path)
+
+
+def _load_paths_from_json(json_path: Path) -> list[Path]:
+    with open(json_path, "r") as fh:
+        return [Path(path) for path in json.load(fh)]
+
+
+def _compute_spei_for_path_list(
+    input_paths: list[Path],
+    output_dir: Path,
+    input_var: str,
+    output_var: str,
+    month_range: tuple,
+    dist,
+) -> list[str]:
+    written_paths = []
+    for input_path in input_paths:
+        output_path = output_dir / f"{input_path.stem}_spei.nc"
+        written_path = _compute_and_save_spei(
+            input_path=input_path,
+            output_path=output_path,
+            input_var=input_var,
+            output_var=output_var,
+            month_range=month_range,
+            dist=dist,
+        )
+        written_paths.append(written_path)
+    return written_paths
+
+
+def _write_json(path: Path, payload) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as fh:
+        json.dump(payload, fh, indent=2)
+
+
+if __name__ == "__main__":
+    default_cfg_path = (
+        Path(__file__).resolve().parents[2] / "analysis" / "qm_rf" / "config.yaml"
+    )
+    cfg = load_qm_rf_config(None, default_config=default_cfg_path)
+
+    input_var = cfg.get("var_name", "CWB")
+    output_var = "spei"
+    month_range = tuple(cfg.get("spei_month_range", [1, 3]))
+
+    reference_path = Path(cfg["reference_data"])
+    hindcasts_json_path = Path(cfg["hindcasts_json"])
+    qm_json_path = Path(cfg["qm_json_path"])
+
+    out_dir = Path(cfg["output_dir"])
+    spei_root = out_dir / "data" / "spei"
+    reference_out_dir = spei_root / "reference"
+    original_hindcasts_out_dir = spei_root / "original_hindcasts"
+    qm_hindcasts_out_dir = spei_root / "qm_hindcasts"
+
+    reference_output = reference_out_dir / f"{reference_path.stem}_spei.nc"
+    reference_spei_path = _compute_and_save_spei(
+        input_path=reference_path,
+        output_path=reference_output,
+        input_var=input_var,
+        output_var=output_var,
+        month_range=month_range,
+        dist=sps.fisk,
+    )
+
+    hindcast_paths = _load_paths_from_json(hindcasts_json_path)
+    hindcast_spei_paths = _compute_spei_for_path_list(
+        input_paths=hindcast_paths,
+        output_dir=original_hindcasts_out_dir,
+        input_var=input_var,
+        output_var=output_var,
+        month_range=month_range,
+        dist=sps.fisk,
+    )
+
+    qm_paths = _load_paths_from_json(qm_json_path)
+    qm_spei_paths = _compute_spei_for_path_list(
+        input_paths=qm_paths,
+        output_dir=qm_hindcasts_out_dir,
+        input_var=input_var,
+        output_var=output_var,
+        month_range=month_range,
+        dist=sps.fisk,
+    )
+
+    _write_json(spei_root / "reference_spei_paths.json", [reference_spei_path])
+    _write_json(spei_root / "original_hindcasts_spei_paths.json", hindcast_spei_paths)
+    _write_json(spei_root / "qm_hindcasts_spei_paths.json", qm_spei_paths)
+
+    print(f"Saved SPEI outputs under {spei_root}")

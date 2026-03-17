@@ -9,7 +9,7 @@ from joblib import dump
 from sklearn.ensemble import RandomForestRegressor
 from IPython import embed
 
-from .rf_net import RandomForestBiasCorrector
+from .model_rf import RandomForestBiasCorrector
 from ..config_loader import load_qm_rf_config
 
 
