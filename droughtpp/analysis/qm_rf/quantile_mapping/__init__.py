@@ -1,3 +1,6 @@
 """quantile mapping helpers for qm_rf package"""
 
-__all__ = ["model_qm", "evaluate_qm"]
+from .model_qm import quantile_map_json
+from .evaluate_qm import run_qm_evaluation
+
+__all__ = ["model_qm", "evaluate_qm", "quantile_map_json", "run_qm_evaluation"]

@@ -5,14 +5,16 @@ experiment: "cwb"
 leadtime_tag: "lm1-6"
 
 hindcasts_json: "${project_root}/droughtpp/data/train/${experiment}/dwd-hindcasts_${leadtime_tag}_test.json"
-residuals_json: "${project_root}/droughtpp/data/train/${experiment}/dwd-hindcasts_${leadtime_tag}_test_residuals.json"
+residuals_json: "${output_dir}/data/paths/qm_residuals_paths.json"
 
 reference_data: "${external_data_root}/spei/${experiment}/era5/era5-tamsat_cwb_remapped_invlat.nc"
 reference: "${reference_data}"
 
 output_dir: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf"
-model_path: "${external_data_root}/${experiment}/rf_model.joblib"
-corrected_spei_paths_json: "${output_dir}/corrected_spei_paths.json"
+model_path: "${output_dir}/model"
+corrected_spei_paths_json: "${output_dir}/data/paths/corrected_spei_paths.json"
+corrected_residuals_json: "${output_dir}/data/paths/corrected_residuals_paths.json"
+corrected_cwb_json: "${output_dir}/data/paths/corrected_cwb_paths.json"
 hindcasts_spei_json: "${output_dir}/data/spei/original_hindcasts_spei_paths.json"
 qm_hindcasts_spei_json: "${output_dir}/data/spei/qm_hindcasts_spei_paths.json"
 reference_spei_json: "${output_dir}/data/spei/reference_spei_paths.json"
@@ -21,16 +23,16 @@ var_name: "CWB"
 predictor_vars: ["CWB"]
 leave_out_years: [2010, 2011, 2012, 2013, 2014]
 
-evaluate_spei: true
-generate_corrected_spei: true
 spei_month_range: [1, 3]
 spei_std_multiplier: 1.0
 
 workflow:
-  run_qm: false
-  run_qm_eval: true
-  run_rf_train: false
-  run_rf_evaluate: true
+  run_qm: false 
+  run_qm_eval: false 
+  run_rf_train: false 
+  run_rf_evaluate: false 
+  evaluate_cwb: true
+  evaluate_spei: false 
 
 data_dir: "${external_data_root}/spei/"
 input_dir: "${project_root}/droughtpp/data/"
@@ -40,9 +42,8 @@ n_estimators: 20
 random_state: 0
 chunk_size: 10
 
-plot_dir: "${output_dir}/"
-qm_output_dir: "${output_dir}/qm_outputs"
-qm_json_path: "${output_dir}/data/qm_hindcast_paths.json"
+plot_dir: "${output_dir}/plots/"
+qm_json_path: "${output_dir}/data/paths/qm_hindcast_paths.json"
 n_quantiles: 20
 bins: 50
 show: false

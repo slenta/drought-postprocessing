@@ -10,7 +10,8 @@ from sklearn.ensemble import RandomForestRegressor
 from IPython import embed
 
 from .model_rf import RandomForestBiasCorrector
-from ..config_loader import load_qm_rf_config
+from .features import RFFeatureBuilder
+from ..config_loader import get_qm_rf_global_config
 
 
 def collect_train_sets(
@@ -19,6 +20,7 @@ def collect_train_sets(
     var_name: str,
     predictor_vars: List[str],
     eval_years: List[int],
+    feature_builder: RFFeatureBuilder,
 ):
     with open(residuals_json, "r") as fh:
         residuals = json.load(fh)
@@ -38,17 +40,7 @@ def collect_train_sets(
         pred_da = xr.open_dataset(hindcast_path)[var_name]
 
         res_s = RF._stack_by_samples(res_da)
-        pred_s = RF._stack_by_samples(pred_da)
-
-        years = pd.to_datetime(res_s.coords["time"].values).year
-
-        X_full = pd.DataFrame(
-            {
-                "predictor": pred_s.values,  # stacked predictor
-                "lat": res_s.coords["latitude"].values,
-                "lon": res_s.coords["longitude"].values,
-            }
-        )
+        X_full, years = feature_builder.build(pred_da)
         y_full = pd.Series(res_s.values, name="residual")
 
         finite_mask = np.isfinite(y_full.values) & np.all(
@@ -73,36 +65,34 @@ def collect_train_sets(
 
 def train(config_path: Path | None = None, config_overrides=None):
     default_cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
-    cfg = load_qm_rf_config(
-        config_path,
+    cfg = get_qm_rf_global_config(
+        config_path=config_path,
         overrides=config_overrides,
         default_config=default_cfg_path,
     )
 
-    residuals_json = Path(cfg["residuals_json"])
-    hindcasts_json = Path(cfg["hindcasts_json"])
-
-    out_dir = Path(cfg.get("output_dir", "./rf_out"))
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    var_name = cfg.get("var_name", "tas")
-    predictor_vars = cfg.get("predictor_vars", [var_name])
-    eval_years = cfg.get("leave_out_years", [])
+    Path(cfg["output_dir"]).mkdir(parents=True, exist_ok=True)
 
     X_train, y_train = collect_train_sets(
-        residuals_json, hindcasts_json, var_name, predictor_vars, eval_years
+        Path(cfg["residuals_json"]),
+        Path(cfg["hindcasts_json"]),
+        cfg["var_name"],
+        cfg["predictor_vars"],
+        cfg["leave_out_years"],
+        RFFeatureBuilder(Path(cfg["reference_data"]), cfg["var_name"]),
     )
 
     rf = RandomForestBiasCorrector()
-    print(cfg.get("n_estimators"), X_train.shape, y_train.shape)
+    print(cfg["n_estimators"], X_train.shape, y_train.shape)
     model = rf.train_with_eta(
         X=X_train,
         y=y_train,
-        n_estimators=cfg.get("n_estimators"),
-        chunk_size=cfg.get("chunk_size"),
+        n_estimators=cfg["n_estimators"],
+        chunk_size=cfg["chunk_size"],
     )
 
-    model_path = out_dir / "rf_model.joblib"
+    model_path = Path(cfg["model_path"])
+    model_path.parent.mkdir(parents=True, exist_ok=True)
     dump(model, model_path)
 
     print(f"Training complete. Model saved to: {model_path}")

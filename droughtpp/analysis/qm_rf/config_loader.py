@@ -12,6 +12,7 @@ import yaml
 _IMPORT_KEYS = ("import_config", "imports", "extends")
 _INTERPOLATION_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_\.]*)\}")
 _INTERPOLATION_FULLMATCH_PATTERN = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_\.]*)\}$")
+_GLOBAL_QM_RF_CONFIG: Dict[str, Any] | None = None
 
 
 def _read_yaml(path: Path) -> Dict[str, Any]:
@@ -188,6 +189,33 @@ def resolve_qm_rf_runtime_arguments(
     return args
 
 
+def set_qm_rf_global_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    global _GLOBAL_QM_RF_CONFIG
+    _GLOBAL_QM_RF_CONFIG = deepcopy(config)
+    return deepcopy(_GLOBAL_QM_RF_CONFIG)
+
+
+def get_qm_rf_global_config(
+    config_path: Path | str | None = None,
+    overrides: Iterable[str] | None = None,
+    default_config: Path | str | None = None,
+    argv: Iterable[str] | None = None,
+    force_reload: bool = False,
+) -> Dict[str, Any]:
+    global _GLOBAL_QM_RF_CONFIG
+
+    if _GLOBAL_QM_RF_CONFIG is None or force_reload:
+        cfg = load_qm_rf_config(
+            config_path=config_path,
+            overrides=overrides,
+            default_config=default_config,
+            argv=argv,
+        )
+        _GLOBAL_QM_RF_CONFIG = deepcopy(cfg)
+
+    return deepcopy(_GLOBAL_QM_RF_CONFIG)
+
+
 def load_qm_rf_config(
     config_path: Path | str | None,
     overrides: Iterable[str] | None = None,
@@ -220,7 +248,9 @@ def load_qm_rf_config(
     if overrides:
         cfg = _apply_overrides(cfg, overrides)
 
-    return _interpolate_config(cfg)
+    interpolated_cfg = _interpolate_config(cfg)
+    set_qm_rf_global_config(interpolated_cfg)
+    return interpolated_cfg
 
 
 def add_qm_rf_config_arguments(

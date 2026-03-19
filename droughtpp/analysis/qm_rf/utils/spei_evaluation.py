@@ -1,9 +1,7 @@
 import json
-from functools import reduce
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import xarray as xr
 
 from droughtpp.evaluation.evaluation import (
@@ -15,17 +13,12 @@ from droughtpp.analysis.qm_rf.utils.visualization import (
     plot_mae_skill_metrics,
     plot_bss_skill_metrics,
 )
-
-
-def _ensure_spatial_dims(data_array: xr.DataArray) -> xr.DataArray:
-    rename_map = {}
-    if "lat" in data_array.dims:
-        rename_map["lat"] = "latitude"
-    if "lon" in data_array.dims:
-        rename_map["lon"] = "longitude"
-    if rename_map:
-        data_array = data_array.rename(rename_map)
-    return data_array
+from droughtpp.analysis.qm_rf.utils.evaluation import (
+    load_paths_from_json,
+    load_eval_data,
+    select_eval_years,
+    intersect_time_coordinates,
+)
 
 
 def _infer_lat_lon_names(da):
@@ -66,35 +59,6 @@ def _to_time_lat_lon(da):
     return da.transpose("time", lat_name, lon_name)
 
 
-def _select_eval_years(data_array: xr.DataArray, eval_years) -> xr.DataArray:
-    if not eval_years:
-        return data_array
-
-    years = pd.to_datetime(data_array["time"].values).year
-    return data_array.isel(time=np.isin(years, eval_years))
-
-
-def _load_spei_data(path: Path, var_name: str) -> xr.DataArray:
-    with xr.open_dataset(path) as ds:
-        data_array = ds[var_name].load()
-
-    data_array = _ensure_spatial_dims(data_array).squeeze()
-    if "time" not in data_array.dims:
-        raise ValueError(f"Expected time dimension in {path}")
-
-    return data_array.dropna("time", how="all")
-
-
-def _intersect_time_coordinates(data_arrays):
-    common_time = reduce(
-        np.intersect1d,
-        [np.asarray(data_array["time"].values) for data_array in data_arrays],
-    )
-    if len(common_time) == 0:
-        raise ValueError("No common SPEI time steps found across evaluation inputs.")
-    return common_time
-
-
 def evaluate_spei(
     corrected_spei_paths,
     hindcasts_spei_json: Path,
@@ -110,11 +74,8 @@ def evaluate_spei(
 
     corrected_spei_paths = [Path(path) for path in corrected_spei_paths]
 
-    with open(hindcasts_spei_json, "r") as fh:
-        baseline_spei_paths = [Path(path) for path in json.load(fh)]
-
-    with open(reference_spei_json, "r") as fh:
-        reference_spei_paths = [Path(path) for path in json.load(fh)]
+    baseline_spei_paths = load_paths_from_json(hindcasts_spei_json)
+    reference_spei_paths = load_paths_from_json(reference_spei_json)
 
     if len(reference_spei_paths) == 0:
         raise ValueError("reference_spei_json does not contain any SPEI path.")
@@ -124,8 +85,8 @@ def evaluate_spei(
             "Mismatch between number of baseline SPEI files and corrected SPEI files."
         )
 
-    reference_spei = _load_spei_data(reference_spei_paths[0], spei_var)
-    reference_spei = _select_eval_years(reference_spei, eval_years)
+    reference_spei = load_eval_data(reference_spei_paths[0], spei_var)
+    reference_spei = select_eval_years(reference_spei, eval_years)
 
     corrected_members = []
     baseline_members = []
@@ -134,11 +95,11 @@ def evaluate_spei(
     for baseline_spei_path, corrected_spei_path in zip(
         baseline_spei_paths, corrected_spei_paths
     ):
-        corrected_spei = _load_spei_data(corrected_spei_path, spei_var)
-        baseline_spei = _load_spei_data(baseline_spei_path, spei_var)
+        corrected_spei = load_eval_data(corrected_spei_path, spei_var)
+        baseline_spei = load_eval_data(baseline_spei_path, spei_var)
 
-        corrected_spei = _select_eval_years(corrected_spei, eval_years)
-        baseline_spei = _select_eval_years(baseline_spei, eval_years)
+        corrected_spei = select_eval_years(corrected_spei, eval_years)
+        baseline_spei = select_eval_years(baseline_spei, eval_years)
 
         corrected_spei, baseline_spei, reference_member = xr.align(
             corrected_spei,
@@ -151,7 +112,7 @@ def evaluate_spei(
         baseline_members.append(baseline_spei)
         reference_members.append(reference_member)
 
-    common_time = _intersect_time_coordinates(
+    common_time = intersect_time_coordinates(
         corrected_members + baseline_members + reference_members
     )
 
@@ -233,6 +194,23 @@ def evaluate_spei(
             upper_threshold_label="mean + 1σ",
             lower_threshold_label="mean - 1σ",
         )
+
+    return {
+        "spei_mae_corrected_mean": float(np.nanmean(mae_corrected)),
+        "spei_mae_baseline_mean": float(np.nanmean(mae_baseline)),
+        "spei_mae_diff_mean": float(np.nanmean(mae_diff)),
+        "spei_rmse_corrected_mean": float(np.nanmean(rmse_corrected)),
+        "spei_rmse_baseline_mean": float(np.nanmean(rmse_baseline)),
+        "spei_rmse_diff_mean": float(np.nanmean(rmse_diff)),
+        "spei_bs_corrected_upper_mean": float(np.nanmean(bs_corrected_upper)),
+        "spei_bs_baseline_upper_mean": float(np.nanmean(bs_baseline_upper)),
+        "spei_bss_upper_mean": float(np.nanmean(bss_upper)),
+        "spei_bs_corrected_lower_mean": float(np.nanmean(bs_corrected_lower)),
+        "spei_bs_baseline_lower_mean": float(np.nanmean(bs_baseline_lower)),
+        "spei_bss_lower_mean": float(np.nanmean(bss_lower)),
+        "spei_n_members": int(corrected_ensemble.sizes["member"]),
+        "spei_n_time": int(corrected_ensemble.sizes["time"]),
+    }
 
 
 def evaluate_spei_pair(
@@ -326,3 +304,14 @@ def evaluate_spei_pair(
             upper_threshold_label="mean + 1σ",
             lower_threshold_label="mean - 1σ",
         )
+
+    return {
+        "mae_output_mean": float(np.nanmean(mae_output)),
+        "mae_gt_mean": float(np.nanmean(mae_gt)),
+        "mae_diff_mean": float(np.nanmean(mae_diff)),
+        "rmse_output_mean": float(np.nanmean(rmse_output)),
+        "rmse_gt_mean": float(np.nanmean(rmse_gt)),
+        "rmse_diff_mean": float(np.nanmean(rmse_diff)),
+        "bss_upper_mean": float(np.nanmean(bss_upper)),
+        "bss_lower_mean": float(np.nanmean(bss_lower)),
+    }

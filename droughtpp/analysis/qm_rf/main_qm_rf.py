@@ -1,11 +1,7 @@
 from pathlib import Path
-from typing import Optional
-
-import json
-import tempfile
 
 # relative imports within the package
-from .config_loader import load_qm_rf_config
+from .config_loader import get_qm_rf_global_config
 from .quantile_mapping.model_qm import quantile_map_json
 from .random_forest.evaluate_rf import evaluate as rf_evaluate
 from .random_forest.train_rf import train as rf_train
@@ -29,70 +25,41 @@ def run_qm_then_rf(
     """
     # load RF/config YAML and allow it to supply QM inputs
     default_cfg_path = Path(__file__).resolve().parent / "config.yaml"
-    cfg = load_qm_rf_config(
-        config_path,
+    cfg = get_qm_rf_global_config(
+        config_path=config_path,
         overrides=config_overrides,
         default_config=default_cfg_path,
     )
 
-    tmp_json_path = None
-
-    # determine input JSONs
-    hindcasts_json_path = Path(cfg["hindcasts_json"])
-    qm_files_json_path = cfg.get(
-        "qm_json_path", str(Path(cfg["output_dir"]) / "data" / "qm_hindcast_paths.json")
-    )
-    ref_path = Path(cfg["reference_data"])
-
-    # allow config to override var_name and output path for QM
-    qm_var = cfg.get("var_name")
-    qm_output = cfg.get("output_dir")
-    plot_dir = cfg.get("plot_dir")
-    n_quantiles = cfg.get("n_quantiles")
-
-    # ensure output directory exists if provided
-    if qm_output:
-        Path(qm_output).mkdir(parents=True, exist_ok=True)
+    Path(cfg["output_dir"]).mkdir(parents=True, exist_ok=True)
 
     # run quantile mapping (use or omit output_path depending on availability)
     if qm_run:
-        quantile_map_json(
-            str(hindcasts_json_path),
-            ref_path=ref_path,
-            var_name=qm_var,
-            out_dir=str(qm_output),
-            n_quantiles=n_quantiles,
-            qm_json_path=str(qm_files_json_path),
-        )
+        quantile_map_json()
 
     if qm_eval:
-        run_qm_evaluation(
-            json_list_path=str(hindcasts_json_path),
-            qm_json_path=str(qm_files_json_path),
-            ref_path=str(ref_path),
-            var_name=qm_var,
-            qm_out_dir=str(qm_output),
-            plot_dir=str(plot_dir),
-            n_quantiles=n_quantiles,
-        )
+        run_qm_evaluation()
 
     # run RF training and evaluation if requested
     if train_rf:
-        rf_train(config_path, config_overrides=config_overrides)
+        rf_train()
 
-    if run_rf_evaluate:
-        rf_evaluate(config_path, config_overrides=config_overrides)
+    if (
+        run_rf_evaluate
+        or cfg["workflow"].get("evaluate_cwb", False)
+        or cfg["workflow"].get("evaluate_spei", False)
+    ):
+        rf_evaluate()
 
 
 if __name__ == "__main__":
     default_cfg_path = Path(__file__).resolve().parent / "config.yaml"
-    cfg = load_qm_rf_config(None, default_config=default_cfg_path)
+    cfg = get_qm_rf_global_config(default_config=default_cfg_path)
 
-    workflow = cfg.get("workflow", {})
     run_qm_then_rf(
         None,
-        train_rf=workflow.get("run_rf_train", False),
-        qm_run=workflow.get("run_qm", False),
-        qm_eval=workflow.get("run_qm_eval", True),
-        run_rf_evaluate=workflow.get("run_rf_evaluate", True),
+        train_rf=cfg["workflow"]["run_rf_train"],
+        qm_run=cfg["workflow"]["run_qm"],
+        qm_eval=cfg["workflow"]["run_qm_eval"],
+        run_rf_evaluate=cfg["workflow"]["run_rf_evaluate"],
     )

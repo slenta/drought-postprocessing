@@ -29,7 +29,7 @@ def combine_qm_and_residuals(
     qm_data : xr.DataArray or xr.Dataset
         Quantile-mapped hindcast CWB data.
     residuals : xr.DataArray or xr.Dataset
-        RF residuals (original - adjusted).
+        RF residuals (reference - qm).
     var_name : str
         Variable name to extract from datasets if needed.
 

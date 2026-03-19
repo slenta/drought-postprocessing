@@ -11,7 +11,7 @@ from ..utils.visualization import (
     plot_mae_skill_metrics,
     plot_bss_skill_metrics,
 )
-from ..config_loader import load_qm_rf_config
+from ..config_loader import get_qm_rf_global_config
 from droughtpp.evaluation.evaluation import (
     brier_skill_score_between_ensembles,
     mae_per_member_grid,
@@ -21,34 +21,44 @@ from droughtpp.evaluation.evaluation import (
 
 
 def run_qm_evaluation(
-    json_list_path,
-    qm_json_path,
-    ref_path,
-    var_name="tas",
-    qm_out_dir=None,
-    plot_dir="qm_plots",
-    n_quantiles=250,
+    config_path=None,
+    config_overrides=None,
 ):
     """
     High-level helper: compute distributions, plot, and compare QM vs. original hindcasts.
     """
-    dists = compute_qm_distributions(
-        json_list_path,
-        ref_path,
-        var_name,
-        qm_json_path=qm_json_path,
-        qm_out_dir=qm_out_dir,
+    default_cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    cfg = get_qm_rf_global_config(
+        config_path=config_path,
+        overrides=config_overrides,
+        default_config=default_cfg_path,
     )
-    plot_qm_distributions(dists, var_name, out_dir=plot_dir, n_quantiles=n_quantiles)
+
+    qm_plot_dir = Path(cfg["plot_dir"]) / "qm"
+    qm_plot_dir.mkdir(parents=True, exist_ok=True)
+
+    dists = compute_qm_distributions(
+        cfg["hindcasts_json"],
+        cfg["reference_data"],
+        cfg["var_name"],
+        qm_json_path=cfg["qm_json_path"],
+        qm_out_dir=cfg["output_dir"],
+    )
+    plot_qm_distributions(
+        dists,
+        cfg["var_name"],
+        out_dir=str(qm_plot_dir),
+        n_quantiles=cfg["n_quantiles"],
+    )
 
     # Compute BSS and MAE for QM vs. original hindcasts
     compute_qm_skill_metrics(
-        json_list_path,
-        qm_json_path,
-        ref_path,
-        var_name,
-        qm_out_dir=qm_out_dir,
-        plot_dir=plot_dir,
+        cfg["hindcasts_json"],
+        cfg["qm_json_path"],
+        cfg["reference_data"],
+        cfg["var_name"],
+        qm_out_dir=cfg["output_dir"],
+        plot_dir=str(qm_plot_dir),
     )
 
 
@@ -192,22 +202,4 @@ def compute_qm_skill_metrics(
 
 
 if __name__ == "__main__":
-
-    cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
-    cfg = load_qm_rf_config(cfg_path)
-
-    json_list = cfg["hindcasts_json"]
-    reference = cfg.get("reference", cfg.get("reference_data"))
-    var = cfg.get("var_name", "tas")
-    qm_out = cfg.get("qm_output_dir")
-    qm_json = cfg["qm_json_path"]
-    plots_out = cfg.get("plot_dir")
-
-    run_qm_evaluation(
-        json_list,
-        qm_json,
-        reference,
-        var_name=var,
-        qm_out_dir=qm_out,
-        plot_dir=plots_out,
-    )
+    run_qm_evaluation()

@@ -15,7 +15,7 @@ class RandomForestBiasCorrector:
       rf = RandomForestBiasCorrector()
       X, y, stacked_ref = rf.prepare_training_data(da_res, predictor_ds, predictor_vars)
       rf.train(X, y)
-      corrected, predicted = rf.apply_rf_correction(original_da, predictor_ds, predictor_vars)
+    corrected, predicted = rf.apply_rf_correction(qm_da, predictor_ds, predictor_vars)
       rf.save_corrected_and_predicted(corrected, predicted, corrected_path, residual_path, var_name=var)
     """
 
@@ -118,20 +118,18 @@ class RandomForestBiasCorrector:
 
     def apply_rf_correction(
         self,
-        original_da: xr.DataArray,
+        qm_da: xr.DataArray,
         predictor_ds: xr.Dataset,
         predictor_vars: _t.List[str],
     ) -> _t.Tuple[xr.DataArray, xr.DataArray]:
         """
-        Apply trained RF to predict residuals and correct original_da.
+        Apply trained RF to predict residuals and correct qm_da.
         Returns (corrected_da, predicted_residual_da).
         """
-        if self.model is None:
-            raise RuntimeError("Model not trained. Call train(...) first.")
 
         preds = [predictor_ds[var] for var in predictor_vars]
-        aligned = xr.align(original_da, *preds, join="exact")
-        orig_aligned = aligned[0]
+        aligned = xr.align(qm_da, *preds, join="exact")
+        qm_aligned = aligned[0]
         preds_aligned = aligned[1:]
 
         pred_s_list = [self._stack_by_samples(p) for p in preds_aligned]
@@ -149,9 +147,9 @@ class RandomForestBiasCorrector:
             coords=(pred_s_list[0].coords["sample"],),
             dims=("sample",),
         )
-        pred_da = pred_da_stacked.unstack("sample").transpose(*orig_aligned.dims)
+        pred_da = pred_da_stacked.unstack("sample").transpose(*qm_aligned.dims)
 
-        corrected = orig_aligned + pred_da
+        corrected = qm_aligned + pred_da
 
         return corrected, pred_da
 
