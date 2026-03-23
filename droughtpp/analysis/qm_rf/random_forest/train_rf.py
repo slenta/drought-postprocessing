@@ -20,6 +20,7 @@ def collect_train_sets(
     predictor_vars: List[str],
     eval_years: List[int],
     feature_builder: RFFeatureBuilder,
+    leadmonth: int,
 ):
     with open(residuals_json, "r") as fh:
         residuals = json.load(fh)
@@ -46,16 +47,27 @@ def collect_train_sets(
             np.isfinite(X_full.values), axis=1
         )
 
+        leadmonth_mask = np.isclose(
+            X_full["lead_month"].values.astype(float),
+            float(leadmonth),
+        )
+
         # keep only training samples (exclude eval_years)
         if years is not None and len(eval_years) > 0:
             eval_mask_year = np.isin(years, eval_years)
         else:
             eval_mask_year = np.zeros_like(finite_mask, dtype=bool)
 
-        train_mask = finite_mask & (~eval_mask_year)
+        train_mask = finite_mask & (~eval_mask_year) & leadmonth_mask
+
+        if not train_mask.any():
+            continue
 
         X_parts.append(X_full.loc[train_mask].reset_index(drop=True))
         y_parts.append(y_full.loc[train_mask].reset_index(drop=True))
+
+    if len(X_parts) == 0:
+        return pd.DataFrame(), pd.Series(dtype=float)
 
     X = pd.concat(X_parts, ignore_index=True)
     y = pd.concat(y_parts, ignore_index=True)
@@ -72,33 +84,50 @@ def train(config_path: Path | None = None, config_overrides=None):
 
     Path(cfg["output_dir"]).mkdir(parents=True, exist_ok=True)
 
-    X_train, y_train = collect_train_sets(
-        Path(cfg["residuals_json"]),
-        Path(cfg["hindcasts_json"]),
+    feature_builder = RFFeatureBuilder(
+        Path(cfg["reference_data"]),
         cfg["var_name"],
-        cfg["predictor_vars"],
-        cfg["leave_out_years"],
-        RFFeatureBuilder(
-            Path(cfg["reference_data"]),
+        cfg.get("additional_reference_features", []),
+    )
+    leadmonths = cfg["leadmonth"]
+
+    for leadmonth in leadmonths:
+        residuals_json = (
+            Path(cfg["output_dir"])
+            / "paths"
+            / f"lm{leadmonth}"
+            / "qm_residuals_paths.json"
+        )
+        X_train, y_train = collect_train_sets(
+            residuals_json,
+            Path(cfg["hindcasts_json"]),
             cfg["var_name"],
-            cfg.get("additional_reference_features", []),
-        ),
-    )
+            cfg["predictor_vars"],
+            cfg["leave_out_years"],
+            feature_builder,
+            leadmonth=leadmonth,
+        )
 
-    rf = RandomForestBiasCorrector()
-    print(cfg["n_estimators"], X_train.shape, y_train.shape)
-    model = rf.train_with_eta(
-        X=X_train,
-        y=y_train,
-        n_estimators=cfg["n_estimators"],
-        chunk_size=cfg["chunk_size"],
-    )
+        if len(y_train) == 0:
+            print(f"No training samples found for leadmonth={leadmonth}; skipping.")
+            continue
 
-    model_path = Path(cfg["model_path"])
-    model_path.parent.mkdir(parents=True, exist_ok=True)
-    dump(model, model_path)
+        rf = RandomForestBiasCorrector()
+        print(cfg["n_estimators"], X_train.shape, y_train.shape)
+        model = rf.train_with_eta(
+            X=X_train,
+            y=y_train,
+            n_estimators=cfg["n_estimators"],
+            chunk_size=cfg["chunk_size"],
+        )
 
-    print(f"Training complete. Model saved to: {model_path}")
+        model_path = Path(cfg["model_dir"]) / f"lm{leadmonth}" / cfg["model_name"]
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        dump(model, model_path)
+
+        print(
+            f"Training complete for leadmonth={leadmonth}. Model saved to: {model_path}"
+        )
 
 
 if __name__ == "__main__":

@@ -34,32 +34,40 @@ def run_qm_evaluation(
         default_config=default_cfg_path,
     )
 
-    qm_plot_dir = Path(cfg["plot_dir"]) / "qm"
-    qm_plot_dir.mkdir(parents=True, exist_ok=True)
+    for leadmonth in cfg["leadmonth"]:
+        qm_plot_dir = Path(cfg["plot_dir"]) / f"lm{leadmonth}" / "qm"
+        qm_plot_dir.mkdir(parents=True, exist_ok=True)
 
-    dists = compute_qm_distributions(
-        cfg["hindcasts_json"],
-        cfg["reference_data"],
-        cfg["var_name"],
-        qm_json_path=cfg["qm_json_path"],
-        qm_out_dir=cfg["output_dir"],
-    )
-    plot_qm_distributions(
-        dists,
-        cfg["var_name"],
-        out_dir=str(qm_plot_dir),
-        n_quantiles=cfg["n_quantiles"],
-    )
+        qm_out_dir = Path(cfg["output_dir"]) / "data" / f"lm{leadmonth}"
+        qm_json_path = (
+            Path(cfg["output_dir"])
+            / "paths"
+            / f"lm{leadmonth}"
+            / "qm_hindcast_paths.json"
+        )
 
-    # Compute BSS and MAE for QM vs. original hindcasts
-    compute_qm_skill_metrics(
-        cfg["hindcasts_json"],
-        cfg["qm_json_path"],
-        cfg["reference_data"],
-        cfg["var_name"],
-        qm_out_dir=cfg["output_dir"],
-        plot_dir=str(qm_plot_dir),
-    )
+        dists = compute_qm_distributions(
+            cfg["hindcasts_json"],
+            cfg["reference_data"],
+            cfg["var_name"],
+            qm_json_path=qm_json_path,
+            qm_out_dir=qm_out_dir,
+        )
+        plot_qm_distributions(
+            dists,
+            cfg["var_name"],
+            out_dir=str(qm_plot_dir),
+            n_quantiles=cfg["n_quantiles"],
+        )
+
+        compute_qm_skill_metrics(
+            cfg["hindcasts_json"],
+            qm_json_path,
+            cfg["reference_data"],
+            cfg["var_name"],
+            qm_out_dir=qm_out_dir,
+            plot_dir=str(qm_plot_dir),
+        )
 
 
 def compute_qm_skill_metrics(

@@ -1,6 +1,11 @@
 """qm_rf workflow package"""
 
-from .main_qm_rf import run_qm_then_rf
+
+def run_qm_then_rf(*args, **kwargs):
+    from .main_qm_rf import run_qm_then_rf as _run_qm_then_rf
+
+    return _run_qm_then_rf(*args, **kwargs)
+
 
 __all__ = [
     "run_qm_then_rf",
