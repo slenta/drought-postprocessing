@@ -21,6 +21,13 @@ reference_spei_json: "${output_dir}/data/spei/reference_spei_paths.json"
 
 var_name: "CWB"
 predictor_vars: ["CWB"]
+additional_reference_features:
+  - name: tas
+    path: /work/bk1318/k202208/crai/hindcast-pp/data/spei/era5/tas/era5-monthly/tas_Amon_reanalysis_era5_r1i1p1_19400101-20241231_tamsatregion_dwdgrid.nc
+    var_name: tas
+  - name: precip
+    path: /work/bk1318/k202208/crai/hindcast-pp/data/spei/era5/precip/tamsat/tamsat_precip_monthly_1983-2024_dwdgrid.nc
+    var_name: rainfall_estimate_filled
 leave_out_years: [2010, 2011, 2012, 2013, 2014]
 
 spei_month_range: [1, 3]

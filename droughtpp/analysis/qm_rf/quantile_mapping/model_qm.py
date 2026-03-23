@@ -26,13 +26,12 @@ def quantile_map_json(
         default_config=default_cfg_path,
     )
 
-    os.makedirs(cfg["output_dir"], exist_ok=True)
-    data_out_dir = os.path.join(cfg["output_dir"], "data")
-    qm_hindcast_out_dir = os.path.join(data_out_dir, "qm_hindcast")
-    qm_residuals_out_dir = os.path.join(data_out_dir, "qm_residuals")
-    os.makedirs(data_out_dir, exist_ok=True)
-    os.makedirs(qm_hindcast_out_dir, exist_ok=True)
-    os.makedirs(qm_residuals_out_dir, exist_ok=True)
+    output_dir = Path(cfg["output_dir"])
+    data_out_dir = output_dir / "data"
+    qm_hindcast_out_dir = data_out_dir / "qm_hindcast"
+    qm_residuals_out_dir = data_out_dir / "qm_residuals"
+    qm_hindcast_out_dir.mkdir(parents=True, exist_ok=True)
+    qm_residuals_out_dir.mkdir(parents=True, exist_ok=True)
 
     qm_hindcast_paths = []
     qm_residual_paths = []
@@ -64,33 +63,33 @@ def quantile_map_json(
         ds_out = ds.copy()
         ds_out[cfg["var_name"]] = adjusted[cfg["var_name"]]
         base, ext = os.path.splitext(os.path.basename(fp))
-        out_path = os.path.join(qm_hindcast_out_dir, f"{base}_qm{ext}")
-        ds_out.to_netcdf(out_path)
-        qm_hindcast_paths.append(out_path)
+        out_path = qm_hindcast_out_dir / f"{base}_qm{ext}"
+        ds_out.to_netcdf(str(out_path))
+        qm_hindcast_paths.append(str(out_path))
 
         # compute residuals (reference minus QM-adjusted) and save separately
         residual = obs_al - adjusted[cfg["var_name"]]
         ds_res = ds.copy()
         ds_res[cfg["var_name"]] = residual
-        out_path_res = os.path.join(qm_residuals_out_dir, f"{base}_qm_residual{ext}")
-        ds_res.to_netcdf(out_path_res)
-        qm_residual_paths.append(out_path_res)
+        out_path_res = qm_residuals_out_dir / f"{base}_qm_residual{ext}"
+        ds_res.to_netcdf(str(out_path_res))
+        qm_residual_paths.append(str(out_path_res))
         ds_res.close()
 
         ds.close()
         ds_out.close()
 
-    qm_hindcast_paths_json = str(cfg["qm_json_path"])
-    os.makedirs(os.path.dirname(qm_hindcast_paths_json), exist_ok=True)
+    qm_hindcast_paths_json = Path(cfg["qm_json_path"])
+    qm_hindcast_paths_json.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(qm_hindcast_paths_json, "w") as fh:
+    with open(str(qm_hindcast_paths_json), "w") as fh:
         json.dump(qm_hindcast_paths, fh, indent=2)
 
-    residuals_paths_json = str(cfg["residuals_json"])
-    os.makedirs(os.path.dirname(residuals_paths_json), exist_ok=True)
+    residuals_paths_json = Path(cfg["residuals_json"])
+    residuals_paths_json.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(residuals_paths_json, "w") as fh:
+    with open(str(residuals_paths_json), "w") as fh:
         json.dump(qm_residual_paths, fh, indent=2)
 
     ds_obs.close()
-    return qm_hindcast_paths_json
+    return str(qm_hindcast_paths_json)

@@ -104,6 +104,82 @@ def load_eval_data(path: Path, var_name: str) -> xr.DataArray:
     return data_array.dropna("time", how="all")
 
 
+def count_extreme_drought_events(ensemble, reference, threshold_lower):
+    """
+    Count reference drought events, correctly hit droughts, and wrong drought predictions.
+
+    Args:
+        ensemble: np.ndarray (time, member, lat, lon)
+        reference: np.ndarray (time, lat, lon)
+        threshold_lower: np.ndarray (lat, lon)
+
+    Returns:
+        tuple[int, int, int]: (reference_count, hit_count, wrong_count)
+    """
+    ensemble = np.asarray(ensemble)
+    reference = np.asarray(reference)
+    threshold_lower = np.asarray(threshold_lower)
+
+    reference_drought = reference < threshold_lower[None, :, :]
+    predicted_drought = ensemble < threshold_lower[None, None, :, :]
+
+    valid = (
+        np.isfinite(ensemble)
+        & np.isfinite(reference)[:, None, :, :]
+        & np.isfinite(threshold_lower)[None, None, :, :]
+    )
+    reference_drought_expanded = reference_drought[:, None, :, :]
+
+    reference_count = int(np.count_nonzero(reference_drought_expanded & valid))
+    hit_count = int(
+        np.count_nonzero(predicted_drought & reference_drought_expanded & valid)
+    )
+    wrong_count = int(
+        np.count_nonzero(predicted_drought & (~reference_drought_expanded) & valid)
+    )
+
+    return reference_count, hit_count, wrong_count
+
+
+def compute_gridcell_drought_hit_rate_percent(ensemble, reference, threshold_lower):
+    """
+    Compute per-gridcell percentage of correctly predicted drought events.
+
+    Args:
+        ensemble: np.ndarray (time, member, lat, lon)
+        reference: np.ndarray (time, lat, lon)
+        threshold_lower: np.ndarray (lat, lon)
+
+    Returns:
+        np.ndarray (lat, lon): hit-rate percentage in [0, 100], NaN where no
+        reference drought events are available.
+    """
+    ensemble = np.asarray(ensemble)
+    reference = np.asarray(reference)
+    threshold_lower = np.asarray(threshold_lower)
+
+    reference_drought = reference < threshold_lower[None, :, :]
+    predicted_drought = ensemble < threshold_lower[None, None, :, :]
+
+    valid = (
+        np.isfinite(ensemble)
+        & np.isfinite(reference)[:, None, :, :]
+        & np.isfinite(threshold_lower)[None, None, :, :]
+    )
+    reference_drought_expanded = reference_drought[:, None, :, :]
+
+    hit_count = np.sum(
+        predicted_drought & reference_drought_expanded & valid, axis=(0, 1)
+    )
+    reference_count = np.sum(reference_drought_expanded & valid, axis=(0, 1))
+
+    hit_rate = np.full(reference_count.shape, np.nan, dtype=float)
+    has_events = reference_count > 0
+    hit_rate[has_events] = (hit_count[has_events] / reference_count[has_events]) * 100.0
+
+    return hit_rate
+
+
 def intersect_time_coordinates(data_arrays) -> np.ndarray:
     common_time = reduce(
         np.intersect1d,

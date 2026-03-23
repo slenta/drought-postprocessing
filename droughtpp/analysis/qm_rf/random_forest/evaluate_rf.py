@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from joblib import load
-from sklearn.metrics import mean_squared_error, r2_score
 from tqdm import tqdm
 import scipy.stats as sps
 
@@ -221,6 +220,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     feature_builder = RFFeatureBuilder(
         Path(cfg["reference_data"]),
         cfg["var_name"],
+        cfg.get("additional_reference_features", []),
     )
 
     if run_rf_evaluate:
@@ -245,30 +245,26 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     corrected_cwb_paths_json = Path(cfg["corrected_cwb_json"])
 
     if run_rf_evaluate:
-
-        spei_paths_json, residual_paths_json, corrected_cwb_paths_json = (
-            save_predicted_residuals(
-                model,
-                Path(cfg["hindcasts_json"]),
-                Path(cfg["qm_json_path"]),
-                cfg["var_name"],
-                cfg["predictor_vars"],
-                cfg["leave_out_years"],
-                out_dir=out_dir,
-                spei_paths_json=spei_paths_json,
-                residual_paths_json=residual_paths_json,
-                corrected_cwb_paths_json=corrected_cwb_paths_json,
-                feature_builder=feature_builder,
-                save_spei=cfg["workflow"]["evaluate_spei"],
-            )
+        save_predicted_residuals(
+            model,
+            Path(cfg["hindcasts_json"]),
+            Path(cfg["qm_json_path"]),
+            cfg["var_name"],
+            cfg["predictor_vars"],
+            cfg["leave_out_years"],
+            out_dir=out_dir,
+            spei_paths_json=spei_paths_json,
+            residual_paths_json=residual_paths_json,
+            corrected_cwb_paths_json=corrected_cwb_paths_json,
+            feature_builder=feature_builder,
+            save_spei=cfg["workflow"]["evaluate_spei"],
         )
 
     metrics_path = None
 
     if evaluate_cwb_flag:
-
         plot_dir = f"{cfg['plot_dir']}/cwb_rf_eval"
-        cwb_metrics = evaluate_cwb(
+        evaluate_cwb(
             corrected_cwb_json=Path(corrected_cwb_paths_json),
             hindcasts_json=Path(cfg["hindcasts_json"]),
             reference_data=Path(cfg["reference_data"]),
@@ -279,11 +275,6 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
             plot_dir=plot_dir,
             qm_hindcasts_json=Path(cfg["qm_json_path"]),
         )
-        metrics.update(cwb_metrics)
-        metrics_path = out_dir / "metrics" / "cwb_eval_metrics.yaml"
-        metrics_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(metrics_path, "w") as fh:
-            yaml.safe_dump(metrics, fh)
 
     if evaluate_spei_flag:
 

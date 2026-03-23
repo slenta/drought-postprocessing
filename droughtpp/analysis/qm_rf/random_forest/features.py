@@ -6,7 +6,12 @@ import xarray as xr
 
 
 class RFFeatureBuilder:
-    def __init__(self, reference_data_path: Path, var_name: str):
+    def __init__(
+        self,
+        reference_data_path: Path,
+        var_name: str,
+        additional_reference_features=None,
+    ):
         with xr.open_dataset(reference_data_path) as ds:
             reference_data_array = ds[var_name].load()
 
@@ -32,6 +37,46 @@ class RFFeatureBuilder:
             round(float(value), 6): index
             for index, value in enumerate(reference_longitudes)
         }
+
+        self.additional_reference_features = []
+        additional_reference_features = additional_reference_features or []
+        for feature_cfg in additional_reference_features:
+            feature_name = str(feature_cfg["name"])
+            feature_path = Path(feature_cfg["path"])
+            feature_var_name = str(feature_cfg["var_name"])
+
+            with xr.open_dataset(feature_path) as ds_feature:
+                feature_data_array = ds_feature[feature_var_name].load()
+
+            feature_data_array = self._ensure_spatial_dims(feature_data_array).squeeze()
+            feature_values = np.asarray(feature_data_array.values)
+            feature_time = pd.to_datetime(feature_data_array["time"].values)
+            feature_time_index = {
+                (int(timestamp.year), int(timestamp.month)): index
+                for index, timestamp in enumerate(feature_time)
+            }
+
+            feature_latitudes = np.asarray(feature_data_array["latitude"].values)
+            feature_longitudes = np.asarray(feature_data_array["longitude"].values)
+
+            feature_lat_index = {
+                round(float(value), 6): index
+                for index, value in enumerate(feature_latitudes)
+            }
+            feature_lon_index = {
+                round(float(value), 6): index
+                for index, value in enumerate(feature_longitudes)
+            }
+
+            self.additional_reference_features.append(
+                {
+                    "name": feature_name,
+                    "values": feature_values,
+                    "time_index": feature_time_index,
+                    "lat_index": feature_lat_index,
+                    "lon_index": feature_lon_index,
+                }
+            )
 
     @staticmethod
     def _ensure_spatial_dims(data_array: xr.DataArray) -> xr.DataArray:
@@ -133,6 +178,57 @@ class RFFeatureBuilder:
                     sample_lon_indices,
                 ]
 
+        additional_lag_features = {}
+        for feature in self.additional_reference_features:
+            feature_name = feature["name"]
+            feature_values = feature["values"]
+            feature_time_index = feature["time_index"]
+            feature_lat_index = feature["lat_index"]
+            feature_lon_index = feature["lon_index"]
+
+            feature_lat_indices = self._lookup_coordinate_indices(
+                latitudes, feature_lat_index
+            )
+            feature_lon_indices = self._lookup_coordinate_indices(
+                longitudes, feature_lon_index
+            )
+            feature_valid_spatial = (feature_lat_indices >= 0) & (feature_lon_indices >= 0)
+
+            feature_prev_1 = np.full(predictor_stacked.sizes["sample"], np.nan, dtype=float)
+            feature_prev_2 = np.full(predictor_stacked.sizes["sample"], np.nan, dtype=float)
+            feature_prev_3 = np.full(predictor_stacked.sizes["sample"], np.nan, dtype=float)
+
+            for year, first_month in first_month_by_year.items():
+                year_mask = years == int(year)
+                sample_mask = year_mask & feature_valid_spatial
+
+                if not np.any(sample_mask):
+                    continue
+
+                sample_indices = np.where(sample_mask)[0]
+                sample_lat_indices = feature_lat_indices[sample_indices]
+                sample_lon_indices = feature_lon_indices[sample_indices]
+
+                for lag, target_array in (
+                    (1, feature_prev_1),
+                    (2, feature_prev_2),
+                    (3, feature_prev_3),
+                ):
+                    ref_year, ref_month = self._shift_year_month(year, first_month, lag)
+                    time_index = feature_time_index.get((ref_year, ref_month))
+                    if time_index is None:
+                        continue
+
+                    feature_slice = feature_values[time_index]
+                    target_array[sample_indices] = feature_slice[
+                        sample_lat_indices,
+                        sample_lon_indices,
+                    ]
+
+            additional_lag_features[f"{feature_name}_prev_1"] = feature_prev_1
+            additional_lag_features[f"{feature_name}_prev_2"] = feature_prev_2
+            additional_lag_features[f"{feature_name}_prev_3"] = feature_prev_3
+
         features = pd.DataFrame(
             {
                 "predictor": predictor_stacked.values,
@@ -144,5 +240,7 @@ class RFFeatureBuilder:
                 "obs_prev_3": obs_prev_3,
             }
         )
+        if additional_lag_features:
+            features = pd.concat([features, pd.DataFrame(additional_lag_features)], axis=1)
 
         return features, years

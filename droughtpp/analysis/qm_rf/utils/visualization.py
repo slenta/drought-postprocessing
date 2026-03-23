@@ -357,91 +357,115 @@ def plot_bss_skill_metrics(
     return out_paths
 
 
-def plot_probability_skill_metrics(
-    prob_corrected_upper,
-    prob_baseline_upper,
-    prob_corrected_lower,
-    prob_baseline_lower,
+def plot_drought_hit_rate_maps(
+    baseline_hit_rate,
+    qm_hit_rate,
+    corrected_hit_rate,
     out_dir="qm_plots",
-    figsize=(12, 8),
-    upper_threshold_label="P90",
+    figsize=(15, 4),
     lower_threshold_label="P10",
-    file_prefix="probability",
-    title_prefix="RF-corrected vs Original",
+    file_prefix="drought_hit_rate_p10",
 ):
     """
-    Plot mean forecast probabilities for upper/lower tail events.
+    Plot per-gridcell drought hit-rate percentages (0-100).
 
     Args:
-        prob_corrected_upper, prob_baseline_upper: np.ndarray (lat, lon)
-            Mean event probability maps for upper-tail threshold.
-        prob_corrected_lower, prob_baseline_lower: np.ndarray (lat, lon)
-            Mean event probability maps for lower-tail threshold.
+        baseline_hit_rate: np.ndarray (lat, lon), Original hindcast hit-rate in %
+        qm_hit_rate: np.ndarray (lat, lon), QM hindcast hit-rate in %
+        corrected_hit_rate: np.ndarray (lat, lon), RF-corrected hindcast hit-rate in %
         out_dir: output directory for plots
         figsize: figure size
-        upper_threshold_label: label for upper threshold (e.g. P90)
         lower_threshold_label: label for lower threshold (e.g. P10)
-        file_prefix: prefix for output filename
-        title_prefix: title prefix
+        file_prefix: output filename prefix
 
     Returns:
-        list of written file paths
+        list[str]: written file paths
     """
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     out_paths = []
 
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    fig, axes = plt.subplots(1, 3, figsize=figsize)
     fig.suptitle(
-        (
-            f"Forecast Event Probability: {title_prefix} "
-            f"(Upper: {upper_threshold_label}, Lower: {lower_threshold_label})"
-        ),
+        f"Correctly Predicted Droughts per Gridcell (< {lower_threshold_label})",
         fontsize=12,
         fontweight="bold",
     )
 
-    ax = axes[0, 0]
-    im = ax.imshow(prob_corrected_upper, cmap="viridis", vmin=0, vmax=1, origin="lower")
-    ax.set_title(
-        f"RF-corrected P(event > {upper_threshold_label}) (mean={np.nanmean(prob_corrected_upper):.3f})",
-        fontsize=9,
-    )
-    ax.set_xlabel("lon")
-    ax.set_ylabel("lat")
-    plt.colorbar(im, ax=ax, label="Probability")
+    panels = [
+        ("Original", baseline_hit_rate),
+        ("QM", qm_hit_rate),
+        ("RF-corrected", corrected_hit_rate),
+    ]
 
-    ax = axes[0, 1]
-    im = ax.imshow(prob_baseline_upper, cmap="viridis", vmin=0, vmax=1, origin="lower")
-    ax.set_title(
-        f"Original P(event > {upper_threshold_label}) (mean={np.nanmean(prob_baseline_upper):.3f})",
-        fontsize=9,
-    )
-    ax.set_xlabel("lon")
-    ax.set_ylabel("lat")
-    plt.colorbar(im, ax=ax, label="Probability")
-
-    ax = axes[1, 0]
-    im = ax.imshow(prob_corrected_lower, cmap="viridis", vmin=0, vmax=1, origin="lower")
-    ax.set_title(
-        f"RF-corrected P(event < {lower_threshold_label}) (mean={np.nanmean(prob_corrected_lower):.3f})",
-        fontsize=9,
-    )
-    ax.set_xlabel("lon")
-    ax.set_ylabel("lat")
-    plt.colorbar(im, ax=ax, label="Probability")
-
-    ax = axes[1, 1]
-    im = ax.imshow(prob_baseline_lower, cmap="viridis", vmin=0, vmax=1, origin="lower")
-    ax.set_title(
-        f"Original P(event < {lower_threshold_label}) (mean={np.nanmean(prob_baseline_lower):.3f})",
-        fontsize=9,
-    )
-    ax.set_xlabel("lon")
-    ax.set_ylabel("lat")
-    plt.colorbar(im, ax=ax, label="Probability")
+    for ax, (name, data) in zip(axes, panels):
+        im = ax.imshow(data, cmap="viridis", vmin=0, vmax=100, origin="lower")
+        ax.set_title(f"{name} hit-rate (mean={np.nanmean(data):.1f}%)", fontsize=9)
+        ax.set_xlabel("lon")
+        ax.set_ylabel("lat")
+        plt.colorbar(im, ax=ax, label="Correct drought predictions [%]")
 
     plt.tight_layout()
-    out_png = Path(out_dir) / f"{file_prefix}_skill_metrics.png"
+    out_png = Path(out_dir) / f"{file_prefix}.png"
+    plt.savefig(str(out_png), bbox_inches="tight", dpi=150)
+    out_paths.append(str(out_png))
+    plt.close()
+
+    return out_paths
+
+
+def plot_extreme_drought_hit_histogram(
+    system_counts,
+    out_dir="qm_plots",
+    lower_percentile=10.0,
+    file_prefix="extreme_drought_p10_histogram",
+):
+    """
+    Plot extreme drought event counts (< lower percentile of reference).
+
+        For each hindcast type, show:
+      - Number of reference drought events
+      - Number of correctly hit drought events
+      - Number of wrongly predicted drought events
+
+    Args:
+                system_counts: list of tuples
+                        (system_name, reference_count, hit_count, wrong_count)
+        out_dir: output directory for plots
+        lower_percentile: lower percentile threshold (default 10)
+        file_prefix: output filename prefix
+
+    Returns:
+        list[str]: written file paths
+    """
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    out_paths = []
+
+    n_systems = len(system_counts)
+    fig, axes = plt.subplots(1, n_systems, figsize=(5 * n_systems, 4), squeeze=False)
+    axes = axes[0]
+
+    bar_labels = ["Reference droughts", "Correct hits", "Wrong predictions"]
+    bar_colors = ["tab:gray", "tab:green", "tab:red"]
+
+    for idx, (system_name, ref_count, hit_count, wrong_count) in enumerate(
+        system_counts
+    ):
+        ax = axes[idx]
+        values = [ref_count, hit_count, wrong_count]
+        ax.bar(np.arange(3), values, color=bar_colors)
+        ax.set_xticks(np.arange(3))
+        ax.set_xticklabels(bar_labels, rotation=20, ha="right")
+        ax.set_ylabel("Count")
+        ax.set_title(f"{system_name} (<P{int(lower_percentile)})")
+
+    fig.suptitle(
+        "Extreme drought events histogram: reference vs hits vs wrong predictions",
+        fontsize=12,
+        fontweight="bold",
+    )
+
+    plt.tight_layout()
+    out_png = Path(out_dir) / f"{file_prefix}.png"
     plt.savefig(str(out_png), bbox_inches="tight", dpi=150)
     out_paths.append(str(out_png))
     plt.close()

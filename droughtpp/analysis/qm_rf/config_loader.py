@@ -51,8 +51,6 @@ def _resolve_ref(context: Dict[str, Any], ref: str) -> Any:
 
 
 def _expand_node(node: Any, context: Dict[str, Any]):
-    changed = False
-
     if isinstance(node, str):
         fullmatch = _INTERPOLATION_FULLMATCH_PATTERN.fullmatch(node)
         if fullmatch:
@@ -64,12 +62,11 @@ def _expand_node(node: Any, context: Dict[str, Any]):
             return str(resolved)
 
         expanded = _INTERPOLATION_PATTERN.sub(repl, node)
-        if expanded != node:
-            changed = True
-        return expanded, changed
+        return expanded, expanded != node
 
     if isinstance(node, dict):
         out = {}
+        changed = False
         for key, value in node.items():
             out_value, value_changed = _expand_node(value, context)
             out[key] = out_value
@@ -78,6 +75,7 @@ def _expand_node(node: Any, context: Dict[str, Any]):
 
     if isinstance(node, list):
         out_list = []
+        changed = False
         for value in node:
             out_value, value_changed = _expand_node(value, context)
             out_list.append(out_value)

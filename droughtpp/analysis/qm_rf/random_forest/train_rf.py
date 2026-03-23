@@ -7,7 +7,6 @@ import pandas as pd
 import xarray as xr
 from joblib import dump
 from sklearn.ensemble import RandomForestRegressor
-from IPython import embed
 
 from .model_rf import RandomForestBiasCorrector
 from .features import RFFeatureBuilder
@@ -79,7 +78,11 @@ def train(config_path: Path | None = None, config_overrides=None):
         cfg["var_name"],
         cfg["predictor_vars"],
         cfg["leave_out_years"],
-        RFFeatureBuilder(Path(cfg["reference_data"]), cfg["var_name"]),
+        RFFeatureBuilder(
+            Path(cfg["reference_data"]),
+            cfg["var_name"],
+            cfg.get("additional_reference_features", []),
+        ),
     )
 
     rf = RandomForestBiasCorrector()

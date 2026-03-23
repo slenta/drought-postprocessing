@@ -10,10 +10,13 @@ from droughtpp.evaluation.evaluation import (
 from droughtpp.analysis.qm_rf.utils.visualization import (
     plot_mae_skill_metrics,
     plot_bss_skill_metrics,
-    plot_probability_skill_metrics,
+    plot_drought_hit_rate_maps,
+    plot_extreme_drought_hit_histogram,
     plot_example_time_means,
 )
 from droughtpp.analysis.qm_rf.utils.evaluation import (
+    compute_gridcell_drought_hit_rate_percent,
+    count_extreme_drought_events,
     load_paths_from_json,
     load_eval_data,
     select_eval_years,
@@ -40,16 +43,12 @@ def brier_skill_score_between_ensembles_percentile(
     prob_b_upper = np.mean(ens_b > threshold_upper[None, None, :, :], axis=1)
     bs_a_upper = np.nanmean((prob_a_upper - obs_upper) ** 2, axis=0)
     bs_b_upper = np.nanmean((prob_b_upper - obs_upper) ** 2, axis=0)
-    prob_a_upper_mean = np.nanmean(prob_a_upper, axis=0)
-    prob_b_upper_mean = np.nanmean(prob_b_upper, axis=0)
 
     obs_lower = (reference < threshold_lower[None, :, :]).astype(float)
     prob_a_lower = np.mean(ens_a < threshold_lower[None, None, :, :], axis=1)
     prob_b_lower = np.mean(ens_b < threshold_lower[None, None, :, :], axis=1)
     bs_a_lower = np.nanmean((prob_a_lower - obs_lower) ** 2, axis=0)
     bs_b_lower = np.nanmean((prob_b_lower - obs_lower) ** 2, axis=0)
-    prob_a_lower_mean = np.nanmean(prob_a_lower, axis=0)
-    prob_b_lower_mean = np.nanmean(prob_b_lower, axis=0)
 
     with np.errstate(divide="ignore", invalid="ignore"):
         bss_upper = 1.0 - (bs_a_upper / bs_b_upper)
@@ -65,10 +64,6 @@ def brier_skill_score_between_ensembles_percentile(
         bs_b_upper,
         bs_a_lower,
         bs_b_lower,
-        prob_a_upper_mean,
-        prob_b_upper_mean,
-        prob_a_lower_mean,
-        prob_b_lower_mean,
     )
 
 
@@ -83,6 +78,7 @@ def evaluate_cwb(
     plot_dir: Path | None = None,
     qm_hindcasts_json: Path | None = None,
 ):
+
     if eval_years is None:
         eval_years = []
 
@@ -180,16 +176,6 @@ def evaluate_cwb(
         rmse_per_member_grid(qm_np, reference_np) if qm_np is not None else None
     )
 
-    mae_corrected = np.nanmean(mae_corrected_member, axis=0)
-    mae_baseline = np.nanmean(mae_baseline_member, axis=0)
-    mae_diff = mae_corrected - mae_baseline
-    mae_qm = np.nanmean(mae_qm_member, axis=0) if mae_qm_member is not None else None
-
-    rmse_corrected = np.nanmean(rmse_corrected_member, axis=0)
-    rmse_baseline = np.nanmean(rmse_baseline_member, axis=0)
-    rmse_diff = rmse_corrected - rmse_baseline
-    rmse_qm = np.nanmean(rmse_qm_member, axis=0) if rmse_qm_member is not None else None
-
     bss_upper, bs_corrected_upper, bs_baseline_upper = (
         brier_skill_score_between_ensembles(
             corrected_np,
@@ -216,10 +202,6 @@ def evaluate_cwb(
         bs_baseline_upper_p90,
         bs_corrected_lower_p10,
         bs_baseline_lower_p10,
-        prob_corrected_upper_p90,
-        prob_baseline_upper_p90,
-        prob_corrected_lower_p10,
-        prob_baseline_lower_p10,
     ) = brier_skill_score_between_ensembles_percentile(
         corrected_np,
         baseline_np,
@@ -251,47 +233,26 @@ def evaluate_cwb(
         plot_dir = Path(plot_dir) / "rf_cwb_results"
         plot_dir.mkdir(parents=True, exist_ok=True)
 
-        # Plot MAE with QM comparison if available
-        if mae_qm_member is not None:
-            plot_mae_skill_metrics(
-                mae_baseline_member,
-                mae_corrected_member,
-                mae_qm_member,
-                out_dir=str(plot_dir),
-                n_members_display=3,
-                metric_name="MAE",
-                file_prefix="mae",
-            )
-        else:
-            plot_mae_skill_metrics(
-                mae_baseline_member,
-                mae_corrected_member,
-                out_dir=str(plot_dir),
-                n_members_display=3,
-                metric_name="MAE",
-                file_prefix="mae",
-            )
+        # Plot MAE / RMSE with optional QM comparison
+        plot_mae_skill_metrics(
+            mae_baseline_member,
+            mae_corrected_member,
+            mae_qm_member,
+            out_dir=str(plot_dir),
+            n_members_display=3,
+            metric_name="MAE",
+            file_prefix="mae",
+        )
 
-        # Plot RMSE with QM comparison if available
-        if rmse_qm_member is not None:
-            plot_mae_skill_metrics(
-                rmse_baseline_member,
-                rmse_corrected_member,
-                rmse_qm_member,
-                out_dir=str(plot_dir),
-                n_members_display=3,
-                metric_name="RMSE",
-                file_prefix="rmse",
-            )
-        else:
-            plot_mae_skill_metrics(
-                rmse_baseline_member,
-                rmse_corrected_member,
-                out_dir=str(plot_dir),
-                n_members_display=3,
-                metric_name="RMSE",
-                file_prefix="rmse",
-            )
+        plot_mae_skill_metrics(
+            rmse_baseline_member,
+            rmse_corrected_member,
+            rmse_qm_member,
+            out_dir=str(plot_dir),
+            n_members_display=3,
+            metric_name="RMSE",
+            file_prefix="rmse",
+        )
 
         plot_bss_skill_metrics(
             bss_upper,
@@ -311,16 +272,70 @@ def evaluate_cwb(
             title_prefix="RF-corrected vs Original",
         )
 
-        plot_probability_skill_metrics(
-            prob_corrected_upper_p90,
-            prob_baseline_upper_p90,
-            prob_corrected_lower_p10,
-            prob_baseline_lower_p10,
+        threshold_lower_p10 = np.nanpercentile(reference_np, 10.0, axis=0)
+
+        if qm_np is not None:
+            baseline_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
+                baseline_np,
+                reference_np,
+                threshold_lower_p10,
+            )
+            qm_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
+                qm_np,
+                reference_np,
+                threshold_lower_p10,
+            )
+            corrected_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
+                corrected_np,
+                reference_np,
+                threshold_lower_p10,
+            )
+            plot_drought_hit_rate_maps(
+                baseline_hit_rate_p10,
+                qm_hit_rate_p10,
+                corrected_hit_rate_p10,
+                out_dir=str(plot_dir),
+                lower_threshold_label="P10",
+                file_prefix="drought_hit_rate_p10",
+            )
+
+        extreme_drought_counts = [
+            (
+                "Original",
+                *count_extreme_drought_events(
+                    baseline_np,
+                    reference_np,
+                    threshold_lower_p10,
+                ),
+            )
+        ]
+        if qm_np is not None:
+            extreme_drought_counts.append(
+                (
+                    "QM",
+                    *count_extreme_drought_events(
+                        qm_np,
+                        reference_np,
+                        threshold_lower_p10,
+                    ),
+                )
+            )
+        extreme_drought_counts.append(
+            (
+                "ML-corrected",
+                *count_extreme_drought_events(
+                    corrected_np,
+                    reference_np,
+                    threshold_lower_p10,
+                ),
+            )
+        )
+
+        plot_extreme_drought_hit_histogram(
+            extreme_drought_counts,
             out_dir=str(plot_dir),
-            file_prefix="probability_p90_p10",
-            upper_threshold_label="P90",
-            lower_threshold_label="P10",
-            title_prefix="RF-corrected vs Original",
+            lower_percentile=10.0,
+            file_prefix="extreme_drought_p10_histogram",
         )
 
         # Plot BSS between RF-corrected and QM if QM data available
@@ -345,38 +360,3 @@ def evaluate_cwb(
             n_members_display=3,
             n_lead_months=3,
         )
-
-    return {
-        "cwb_mae_corrected_mean": float(np.nanmean(mae_corrected)),
-        "cwb_mae_baseline_mean": float(np.nanmean(mae_baseline)),
-        "cwb_mae_diff_mean": float(np.nanmean(mae_diff)),
-        "cwb_mae_qm_mean": float(np.nanmean(mae_qm)) if mae_qm is not None else None,
-        "cwb_rmse_corrected_mean": float(np.nanmean(rmse_corrected)),
-        "cwb_rmse_baseline_mean": float(np.nanmean(rmse_baseline)),
-        "cwb_rmse_diff_mean": float(np.nanmean(rmse_diff)),
-        "cwb_rmse_qm_mean": float(np.nanmean(rmse_qm)) if rmse_qm is not None else None,
-        "cwb_bs_corrected_upper_mean": float(np.nanmean(bs_corrected_upper)),
-        "cwb_bs_baseline_upper_mean": float(np.nanmean(bs_baseline_upper)),
-        "cwb_bss_upper_mean": float(np.nanmean(bss_upper)),
-        "cwb_bs_corrected_lower_mean": float(np.nanmean(bs_corrected_lower)),
-        "cwb_bs_baseline_lower_mean": float(np.nanmean(bs_baseline_lower)),
-        "cwb_bss_lower_mean": float(np.nanmean(bss_lower)),
-        "cwb_bs_corrected_upper_p90_mean": float(np.nanmean(bs_corrected_upper_p90)),
-        "cwb_bs_baseline_upper_p90_mean": float(np.nanmean(bs_baseline_upper_p90)),
-        "cwb_bss_upper_p90_mean": float(np.nanmean(bss_upper_p90)),
-        "cwb_bs_corrected_lower_p10_mean": float(np.nanmean(bs_corrected_lower_p10)),
-        "cwb_bs_baseline_lower_p10_mean": float(np.nanmean(bs_baseline_lower_p10)),
-        "cwb_bss_lower_p10_mean": float(np.nanmean(bss_lower_p10)),
-        "cwb_bss_rf_vs_qm_upper_mean": (
-            float(np.nanmean(bss_rf_vs_qm_upper))
-            if bss_rf_vs_qm_upper is not None
-            else None
-        ),
-        "cwb_bss_rf_vs_qm_lower_mean": (
-            float(np.nanmean(bss_rf_vs_qm_lower))
-            if bss_rf_vs_qm_lower is not None
-            else None
-        ),
-        "cwb_n_members": int(corrected_ensemble.sizes["member"]),
-        "cwb_n_time": int(corrected_ensemble.sizes["time"]),
-    }
