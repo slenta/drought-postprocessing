@@ -114,12 +114,17 @@ def evaluate_pp_skill(arg_file=None, prog_func=None):
         diff_corr = output_corr - gt_corr
         diff_rmse = output_rmse - gt_rmse
         land_mask = np.isnan(gt_corr)
-        output_corr = np.where(land_mask, np.nan, output_corr)
-        output_rmse = np.where(land_mask, np.nan, output_rmse)
-        gt_rmse = np.where(land_mask, np.nan, gt_rmse)
-        gt_corr = np.where(land_mask, np.nan, gt_corr)
-        diff_corr = np.where(land_mask, np.nan, diff_corr)
-        diff_rmse = np.where(land_mask, np.nan, diff_rmse)
+        output_corr, output_rmse, gt_rmse, gt_corr, diff_corr, diff_rmse = [
+            np.where(land_mask, np.nan, arr)
+            for arr in (
+                output_corr,
+                output_rmse,
+                gt_rmse,
+                gt_corr,
+                diff_corr,
+                diff_rmse,
+            )
+        ]
 
         # Stack for this member
         corr_array.append(np.stack([gt_corr, output_corr, diff_corr, mask[0]], axis=0))

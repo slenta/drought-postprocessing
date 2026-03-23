@@ -1,12 +1,8 @@
-import os.path
-import sys
-
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 import xarray as xr
-from IPython import embed
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import properscoring as ps
