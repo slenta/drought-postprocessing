@@ -230,7 +230,6 @@ def evaluate_cwb(
         )
 
     if plot_dir is not None:
-        plot_dir = Path(plot_dir) / "rf_cwb_results"
         plot_dir.mkdir(parents=True, exist_ok=True)
 
         # Plot MAE / RMSE with optional QM comparison

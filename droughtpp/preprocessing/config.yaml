@@ -1,0 +1,43 @@
+output_data_dir: /work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/eval_results/cwb/qm_rf/data/preprocessing/
+output_paths_dir: /work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/eval_results/cwb/qm_rf/paths/preprocessing/
+
+hindcast_precip_json: /work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/preprocessing/inputs/hindcast_precip_paths.json
+hindcast_temp_json: /work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/preprocessing/inputs/hindcast_temp_paths.json
+reference_precip_json: /work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/preprocessing/inputs/reference_precip_paths.json
+reference_temp_json: /work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/preprocessing/inputs/reference_temp_paths.json
+
+leadmonths: [1, 2, 3, 4, 5, 6]
+output_var_name: CWB
+
+workflow:
+  process_hindcast: false 
+  process_reference: true 
+  combine_hindcast_month_window: true
+  intensity: true
+
+combine_hindcast_month_window:
+  start_month: 6
+  end_month: 11
+
+intensity:
+  lower_threshold: 10
+  upper_threshold: 90
+  input_var_name: CWB
+  output_var_name: CWB_INTENSITY
+
+hindcast:
+  temp_var: t2m
+  precip_var: precip
+  lat_name: latitude
+  lon_name: longitude
+  temp_unit: K
+  member: true
+  n_members: 25 
+
+reference:
+  temp_var: tas 
+  precip_var: rainfall_estimate_filled
+  lat_name: latitude
+  lon_name: longitude
+  temp_unit: K
+  member: false

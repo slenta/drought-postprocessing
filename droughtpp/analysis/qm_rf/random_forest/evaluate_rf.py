@@ -309,7 +309,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
         metrics_path = None
 
         if evaluate_cwb_flag:
-            plot_dir = f"{cfg['plot_dir']}/{leadmonth_label}/cwb_rf_eval"
+            plot_dir = f"{cfg['plot_dir']}/cwb_rf_eval/{leadmonth_label}"
             evaluate_cwb(
                 corrected_cwb_json=Path(corrected_cwb_paths_json),
                 hindcasts_json=Path(cfg["hindcasts_json"]),
@@ -329,16 +329,10 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
 
         if evaluate_spei_flag:
 
-            if not spei_paths_json.exists():
-                raise FileNotFoundError(
-                    f"Missing corrected SPEI paths file: {spei_paths_json}. "
-                    "Run with workflow.run_rf_evaluate=true and workflow.evaluate_spei=true first to generate corrected SPEI."
-                )
-
             with open(spei_paths_json, "r") as fh:
                 corrected_spei_paths = json.load(fh)
 
-            plot_dir = f"{cfg['plot_dir']}/{leadmonth_label}/spei_rf_eval"
+            plot_dir = f"{cfg['plot_dir']}/spei_rf_eval/{leadmonth_label}"
             spei_metrics = evaluate_spei(
                 corrected_spei_paths=corrected_spei_paths,
                 hindcasts_spei_json=Path(cfg["hindcasts_spei_json"]),
@@ -350,21 +344,11 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
             )
             metrics.update(spei_metrics)
             metrics_path = (
-                out_dir / "metrics" / leadmonth_label / "spei_eval_metrics.yaml"
+                out_dir / "metrics" / f"spei_eval_metrics_{leadmonth_label}.yaml"
             )
             metrics_path.parent.mkdir(parents=True, exist_ok=True)
             with open(metrics_path, "w") as fh:
                 yaml.safe_dump(metrics, fh)
-
-        if metrics_path is not None:
-            print(
-                f"Evaluation complete for leadmonth={leadmonth}. Metrics saved to: {metrics_path}"
-            )
-        else:
-            print(
-                f"Evaluation complete for leadmonth={leadmonth}. No metric evaluation stage was enabled."
-            )
-        print(metrics)
 
 
 if __name__ == "__main__":

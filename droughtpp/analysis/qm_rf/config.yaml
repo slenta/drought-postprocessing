@@ -29,6 +29,10 @@ additional_reference_features:
   - name: precip
     path: /work/bk1318/k202208/crai/hindcast-pp/data/spei/era5/precip/tamsat/tamsat_precip_monthly_1983-2024_dwdgrid.nc
     var_name: rainfall_estimate_filled
+  - name: cwb_clim
+    path: /work/bk1318/k202208/crai/hindcast-pp/data/spei/cwb/era5/era5-tamsat_cwb_remapped_invlat_climatology.nc
+    var_name: CWB
+    mode: monthly_climatology
 leave_out_years: [2010, 2011, 2012, 2013, 2014]
 
 spei_month_range: [1, 3]

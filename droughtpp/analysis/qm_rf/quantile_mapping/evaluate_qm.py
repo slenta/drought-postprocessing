@@ -35,7 +35,7 @@ def run_qm_evaluation(
     )
 
     for leadmonth in cfg["leadmonth"]:
-        qm_plot_dir = Path(cfg["plot_dir"]) / f"lm{leadmonth}" / "qm"
+        qm_plot_dir = Path(cfg["plot_dir"]) / "qm" / f"lm{leadmonth}"
         qm_plot_dir.mkdir(parents=True, exist_ok=True)
 
         qm_out_dir = Path(cfg["output_dir"]) / "data" / f"lm{leadmonth}"
