@@ -23,29 +23,28 @@ from droughtpp.analysis.qm_rf.utils.spei_from_rf import (
 
 def collect_eval_set(
     residuals_json: Path,
-    hindcasts_json: Path,
+    qm_hindcasts_json: Path,
     var_name: str,
     predictor_vars: List[str],
     eval_years: List[int],
     feature_builder: RFFeatureBuilder,
-    leadmonth: int,
 ):
     with open(residuals_json, "r") as fh:
         residuals = json.load(fh)
-    with open(hindcasts_json, "r") as fh:
-        hindcasts = json.load(fh)
+    with open(qm_hindcasts_json, "r") as fh:
+        qm_hindcasts = json.load(fh)
 
     X_parts = []
     y_parts = []
 
     RF = RandomForestBiasCorrector
 
-    for resid_path, hindcast_path in zip(residuals, hindcasts):
+    for resid_path, qm_hindcast_path in zip(residuals, qm_hindcasts):
         resid_path = str(resid_path)
-        hindcast_path = str(hindcast_path)
+        qm_hindcast_path = str(qm_hindcast_path)
 
         res_da = xr.open_dataset(resid_path)[var_name]
-        pred_da = xr.open_dataset(hindcast_path)[var_name]
+        pred_da = xr.open_dataset(qm_hindcast_path)[var_name]
 
         res_s = RF._stack_by_samples(res_da)
         X_full, years = feature_builder.build(pred_da)
@@ -55,17 +54,12 @@ def collect_eval_set(
             np.isfinite(X_full.values), axis=1
         )
 
-        leadmonth_mask = np.isclose(
-            X_full["lead_month"].values.astype(float),
-            float(leadmonth),
-        )
-
         if years is not None and len(eval_years) > 0:
             eval_mask_year = np.isin(years, eval_years)
         else:
             eval_mask_year = np.zeros_like(finite_mask, dtype=bool)
 
-        eval_mask = finite_mask & eval_mask_year & leadmonth_mask
+        eval_mask = finite_mask & eval_mask_year
 
         if eval_mask.any():
             X_parts.append(X_full.loc[eval_mask].reset_index(drop=True))
@@ -167,14 +161,14 @@ def save_predicted_residuals(
         cwb_base = Path(f"{out_dir}/cwb_corrected/")
         cwb_base.mkdir(parents=True, exist_ok=True)
 
-        out_path = f"{out_base}/{p.stem}{suffix}.nc"
+        out_path = f"{out_base}/{p.stem}{suffix}_lm{leadmonth}.nc"
         ds_out.to_netcdf(str(out_path))
         residual_paths.append(str(Path(out_path)))
 
         corrected_cwb = combine_qm_and_residuals(
             qm_da, pred_da, var_name=var_name
         ).squeeze()
-        corrected_cwb_path = cwb_base / f"{p.stem}_qm_rf_cwb.nc"
+        corrected_cwb_path = cwb_base / f"{p.stem}_qm_rf_cwb_lm{leadmonth}.nc"
         ds_cwb = ds.copy()
         ds_cwb[var_name] = corrected_cwb
         ds_cwb = ds_cwb.sel(time=pd.to_datetime(valid_times))
@@ -233,6 +227,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     run_rf_evaluate = bool(workflow.get("run_rf_evaluate", False))
     evaluate_cwb_flag = bool(workflow.get("evaluate_cwb", False))
     evaluate_spei_flag = bool(workflow.get("evaluate_spei", False))
+    rf_results_tag = cfg["rf_results_tag"]
 
     feature_builder = RFFeatureBuilder(
         Path(cfg["reference_data"]),
@@ -244,7 +239,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
 
     for leadmonth in leadmonths:
         leadmonth_label = f"lm{leadmonth}"
-        month_data_dir = out_dir / "data" / leadmonth_label
+        month_data_dir = out_dir / "data" / "rf_eval" / rf_results_tag / leadmonth_label
         month_data_dir.mkdir(parents=True, exist_ok=True)
 
         metrics = {}
@@ -257,16 +252,25 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
                 / f"lm{leadmonth}"
                 / "qm_residuals_paths.json"
             )
+            qm_hindcasts_json = (
+                Path(cfg["output_dir"])
+                / "paths"
+                / f"lm{leadmonth}"
+                / "qm_hindcast_paths.json"
+            )
             X_eval, y_eval = collect_eval_set(
                 residuals_json,
-                Path(cfg["hindcasts_json"]),
+                qm_hindcasts_json,
                 cfg["var_name"],
                 cfg["predictor_vars"],
                 cfg["leave_out_years"],
                 feature_builder,
-                leadmonth=leadmonth,
             )
-            model_path = Path(cfg["model_dir"]) / f"lm{leadmonth}" / cfg["model_name"]
+            model_path = (
+                Path(cfg["model_dir"])
+                / cfg["rf_results_tag"]
+                / f"{cfg['model_name']}_lm{leadmonth}.joblib"
+            )
             model = load(model_path)
             metrics["n_eval_samples"] = int(len(y_eval))
             print(
@@ -274,22 +278,31 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
             )
 
         spei_paths_json = (
-            out_dir / "paths" / leadmonth_label / "corrected_spei_paths.json"
+            out_dir
+            / "paths"
+            / "rf_eval"
+            / rf_results_tag
+            / leadmonth_label
+            / "corrected_spei_paths.json"
         )
         residual_paths_json = (
-            out_dir / "paths" / leadmonth_label / "corrected_residuals_paths.json"
+            out_dir
+            / "paths"
+            / "rf_eval"
+            / rf_results_tag
+            / leadmonth_label
+            / "corrected_residuals_paths.json"
         )
         corrected_cwb_paths_json = (
-            out_dir / "paths" / leadmonth_label / "corrected_cwb_paths.json"
+            out_dir
+            / "paths"
+            / "rf_eval"
+            / rf_results_tag
+            / leadmonth_label
+            / "corrected_cwb_paths.json"
         )
 
         if run_rf_evaluate:
-            qm_hindcasts_json = (
-                Path(cfg["output_dir"])
-                / "paths"
-                / f"lm{leadmonth}"
-                / "qm_hindcast_paths.json"
-            )
             save_predicted_residuals(
                 model,
                 Path(cfg["hindcasts_json"]),
@@ -309,7 +322,9 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
         metrics_path = None
 
         if evaluate_cwb_flag:
-            plot_dir = f"{cfg['plot_dir']}/cwb_rf_eval/{leadmonth_label}"
+            plot_dir = (
+                f"{cfg['plot_dir']}/cwb_rf_eval/{rf_results_tag}/{leadmonth_label}"
+            )
             evaluate_cwb(
                 corrected_cwb_json=Path(corrected_cwb_paths_json),
                 hindcasts_json=Path(cfg["hindcasts_json"]),
@@ -332,7 +347,9 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
             with open(spei_paths_json, "r") as fh:
                 corrected_spei_paths = json.load(fh)
 
-            plot_dir = f"{cfg['plot_dir']}/spei_rf_eval/{leadmonth_label}"
+            plot_dir = (
+                f"{cfg['plot_dir']}/spei_rf_eval/{rf_results_tag}/{leadmonth_label}"
+            )
             spei_metrics = evaluate_spei(
                 corrected_spei_paths=corrected_spei_paths,
                 hindcasts_spei_json=Path(cfg["hindcasts_spei_json"]),

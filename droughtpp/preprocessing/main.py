@@ -80,12 +80,10 @@ class PreprocessingWorkflow:
             )
         )
         intensity_output_var = str(intensity_cfg.get("output_var_name"))
+        leadmonths = [int(value) for value in self.config.get("leadmonths", [])]
+        by_leadmonth_outputs: dict[int, list[str]] = {}
 
         if bool(workflow_cfg.get("process_hindcast", True)):
-            leadmonths = [int(value) for value in self.config.get("leadmonths", [])]
-
-            by_leadmonth_outputs: dict[int, list[str]] = {}
-
             for leadmonth in leadmonths:
 
                 hindcast_outputs = process_hindcast_leadmonth(
@@ -114,45 +112,55 @@ class PreprocessingWorkflow:
                 "paths_json": str(hindcast_paths_json),
             }
 
-            if bool(workflow_cfg.get("combine_hindcast_month_window", True)):
-                merged_outputs, merged_paths_json = combine_hindcast_month_window(
-                    by_leadmonth_outputs=by_leadmonth_outputs,
-                    leadmonths=leadmonths,
-                    start_month=start_month,
-                    end_month=end_month,
-                    output_dir=hindcast_combined_dir,
-                    output_paths_dir=output_paths_dir,
-                )
-                results["hindcast"]["month_window_outputs"] = merged_outputs
-                results["hindcast"]["month_window_paths_json"] = merged_paths_json
+        if bool(workflow_cfg.get("combine_hindcast_month_window", True)):
+            if not by_leadmonth_outputs:
+                for leadmonth in leadmonths:
+                    leadmonth_paths = sorted(
+                        hindcast_cwb_dir.glob(f"hindcast_lm{leadmonth}_cwb_*.nc")
+                    )
+                    by_leadmonth_outputs[leadmonth] = [
+                        str(path) for path in leadmonth_paths
+                    ]
 
-                if bool(workflow_cfg.get("intensity", True)):
-                    monthly_lower_thresholds = compute_ensemble_monthly_thresholds(
-                        cwb_paths=merged_outputs,
-                        lower_threshold_percentile=lower_percentile,
-                        input_var_name=intensity_input_var,
-                    )
-                    intensity_outputs: list[str] = []
-                    for cwb_path in merged_outputs:
-                        intensity_outputs.append(
-                            compute_threshold_exceedance_intensity(
-                                cwb_path=cwb_path,
-                                monthly_lower_thresholds=monthly_lower_thresholds,
-                                output_data_dir=hindcast_intensity_dir,
-                                input_var_name=intensity_input_var,
-                                output_var_name=intensity_output_var,
-                            )
+            merged_outputs, merged_paths_json = combine_hindcast_month_window(
+                by_leadmonth_outputs=by_leadmonth_outputs,
+                leadmonths=leadmonths,
+                start_month=start_month,
+                end_month=end_month,
+                output_dir=hindcast_combined_dir,
+                output_paths_dir=output_paths_dir,
+            )
+            results.setdefault("hindcast", {})
+            results["hindcast"]["month_window_outputs"] = merged_outputs
+            results["hindcast"]["month_window_paths_json"] = merged_paths_json
+
+            if bool(workflow_cfg.get("intensity", True)):
+                monthly_lower_thresholds = compute_ensemble_monthly_thresholds(
+                    cwb_paths=merged_outputs,
+                    lower_threshold_percentile=lower_percentile,
+                    input_var_name=intensity_input_var,
+                )
+                intensity_outputs: list[str] = []
+                for cwb_path in merged_outputs:
+                    intensity_outputs.append(
+                        compute_threshold_exceedance_intensity(
+                            cwb_path=cwb_path,
+                            monthly_lower_thresholds=monthly_lower_thresholds,
+                            output_data_dir=hindcast_intensity_dir,
+                            input_var_name=intensity_input_var,
+                            output_var_name=intensity_output_var,
                         )
-                    intensity_paths_json = output_paths_dir / (
-                        f"hindcast_cwb_month_window_intensity_paths_{start_month:02d}-{end_month:02d}.json"
                     )
-                    write_paths_json(intensity_outputs, intensity_paths_json)
-                    results["hindcast"][
-                        "month_window_intensity_outputs"
-                    ] = intensity_outputs
-                    results["hindcast"][
-                        "month_window_intensity_paths_json"
-                    ] = intensity_paths_json
+                intensity_paths_json = output_paths_dir / (
+                    f"hindcast_cwb_month_window_intensity_paths_{start_month:02d}-{end_month:02d}.json"
+                )
+                write_paths_json(intensity_outputs, intensity_paths_json)
+                results["hindcast"][
+                    "month_window_intensity_outputs"
+                ] = intensity_outputs
+                results["hindcast"][
+                    "month_window_intensity_paths_json"
+                ] = intensity_paths_json
 
         if bool(workflow_cfg.get("process_reference", True)):
             reference_outputs = process_group(

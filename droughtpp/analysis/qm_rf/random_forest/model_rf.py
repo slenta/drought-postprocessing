@@ -5,6 +5,7 @@ import pandas as pd
 import time
 from tqdm import tqdm
 from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
 
 
 class RandomForestBiasCorrector:
@@ -20,7 +21,8 @@ class RandomForestBiasCorrector:
     """
 
     def __init__(self):
-        self.model: _t.Optional[RandomForestRegressor] = None
+        self.model: _t.Optional[_t.Union[RandomForestRegressor, XGBRegressor]] = None
+        self.training_history: _t.Optional[dict] = None
 
     @staticmethod
     def _stack_by_samples(da: xr.DataArray) -> xr.DataArray:
@@ -79,17 +81,82 @@ class RandomForestBiasCorrector:
         self,
         X: pd.DataFrame,
         y: pd.Series,
+        X_val: _t.Optional[pd.DataFrame] = None,
+        y_val: _t.Optional[pd.Series] = None,
+        model_type: str = "rf",
         n_estimators: int = 100,
         chunk_size: int = 10,
-    ) -> RandomForestRegressor:
+        random_state: int = 0,
+        xgb_learning_rate: float = 0.1,
+        xgb_max_depth: int = 6,
+        xgb_subsample: float = 0.8,
+        xgb_colsample_bytree: float = 0.8,
+        xgb_min_child_weight: float = 1.0,
+        xgb_eval_metric: str = "rmse",
+    ) -> _t.Union[RandomForestRegressor, XGBRegressor]:
+
+        model_type = str(model_type).lower()
+        if model_type in {"xgb", "xgboost"}:
+            xgb = XGBRegressor(
+                n_estimators=n_estimators,
+                random_state=random_state,
+                learning_rate=xgb_learning_rate,
+                max_depth=xgb_max_depth,
+                subsample=xgb_subsample,
+                colsample_bytree=xgb_colsample_bytree,
+                min_child_weight=xgb_min_child_weight,
+                eval_metric=xgb_eval_metric,
+                objective="reg:squarederror",
+                n_jobs=-1,
+            )
+            if X_val is not None and y_val is not None:
+                eval_set = [(X.values, y.values), (X_val.values, y_val.values)]
+            else:
+                eval_set = [(X.values, y.values)]
+
+            xgb.fit(
+                X.values,
+                y.values,
+                eval_set=eval_set,
+                verbose=False,
+            )
+
+            evals_result = xgb.evals_result()
+            train_key = "validation_0"
+            val_key = "validation_1"
+            train_hist = evals_result.get(train_key, {}).get(xgb_eval_metric, [])
+            val_hist = evals_result.get(val_key, {}).get(xgb_eval_metric, [])
+            n_rounds = list(range(1, len(train_hist) + 1))
+            self.training_history = {
+                "model_type": "xgboost",
+                "metric": xgb_eval_metric,
+                "x": n_rounds,
+                "train": train_hist,
+                "val": val_hist if len(val_hist) > 0 else None,
+            }
+            self.model = xgb
+            return xgb
 
         start = time.time()
         total_done = 0
         first = min(chunk_size, n_estimators)
 
-        rf = RandomForestRegressor(n_estimators=first, warm_start=True, n_jobs=-1)
+        rf = RandomForestRegressor(
+            n_estimators=first,
+            warm_start=True,
+            n_jobs=-1,
+            random_state=random_state,
+        )
         rf.fit(X.values, y.values)
         total_done += first
+
+        train_rmse = [float(np.sqrt(np.mean((rf.predict(X.values) - y.values) ** 2)))]
+        val_rmse = []
+        if X_val is not None and y_val is not None:
+            val_rmse.append(
+                float(np.sqrt(np.mean((rf.predict(X_val.values) - y_val.values) ** 2)))
+            )
+        trees_hist = [total_done]
 
         pbar = tqdm(total=n_estimators, desc="RF training", unit="trees")
         pbar.update(first)
@@ -112,7 +179,25 @@ class RandomForestBiasCorrector:
                 f"Elapsed {elapsed:.0f}s — trees {total_done}/{n_estimators} — last_chunk {chunk_time:.1f}s — ETA {eta:.0f}s"
             )
 
+            trees_hist.append(total_done)
+            train_rmse.append(
+                float(np.sqrt(np.mean((rf.predict(X.values) - y.values) ** 2)))
+            )
+            if X_val is not None and y_val is not None:
+                val_rmse.append(
+                    float(
+                        np.sqrt(np.mean((rf.predict(X_val.values) - y_val.values) ** 2))
+                    )
+                )
+
         pbar.close()
+        self.training_history = {
+            "model_type": "rf",
+            "metric": "rmse",
+            "x": trees_hist,
+            "train": train_rmse,
+            "val": val_rmse if len(val_rmse) > 0 else None,
+        }
         self.model = rf
         return rf
 

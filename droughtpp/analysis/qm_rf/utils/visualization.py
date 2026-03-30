@@ -35,25 +35,25 @@ def plot_qm_distributions(
     x_max = max(orig_mean.max(), qm_mean.max())
     bins = np.linspace(x_min, x_max, bins)
 
-    for key, d in distributions.items():
-        orig_vals = d["orig"]
-        qm_vals = d["qm"]
-        obs_vals = d["obs"]
+    # for key, d in distributions.items():
+    #     orig_vals = d["orig"]
+    #     qm_vals = d["qm"]
+    #     obs_vals = d["obs"]
 
-        plt.figure(figsize=figsize)
-        plt.hist(orig_vals, bins=bins, density=True, alpha=0.45, label="original")
-        plt.hist(qm_vals, bins=bins, density=True, alpha=0.45, label="quantile-mapped")
-        plt.hist(obs_vals, bins=bins, density=True, alpha=0.45, label="reference")
-        plt.legend()
-        plt.title(f"{key} — {var_name} distribution (QM vs obs)")
-        plt.xlabel(var_name)
-        plt.xlim(x_min, x_max)
-        plt.ylabel("density")
+    #     plt.figure(figsize=figsize)
+    #     plt.hist(orig_vals, bins=bins, density=True, alpha=0.45, label="original")
+    #     plt.hist(qm_vals, bins=bins, density=True, alpha=0.45, label="quantile-mapped")
+    #     plt.hist(obs_vals, bins=bins, density=True, alpha=0.45, label="reference")
+    #     plt.legend()
+    #     plt.title(f"{key} — {var_name} distribution (QM vs obs)")
+    #     plt.xlabel(var_name)
+    #     plt.xlim(x_min, x_max)
+    #     plt.ylabel("density")
 
-        out_png = Path(out_dir) / f"{key}_qm_distribution_n{n_quantiles}.png"
-        plt.savefig(str(out_png), bbox_inches="tight")
-        out_paths.append(str(out_png))
-        plt.close()
+    #     out_png = Path(out_dir) / f"{key}_qm_distribution_n{n_quantiles}.png"
+    #     plt.savefig(str(out_png), bbox_inches="tight")
+    #     out_paths.append(str(out_png))
+    #     plt.close()
 
     plt.figure(figsize=figsize)
     plt.hist(orig_mean, bins=bins, density=True, alpha=0.45, label="original")
@@ -127,52 +127,107 @@ def plot_mae_skill_metrics(
         fontweight="bold",
     )
 
+    # Compute global vmin/vmax for viridis (absolute metrics)
+    viridis_values = np.concatenate(
+        [
+            mae_orig.ravel(),
+            mae_corrected.ravel(),
+            mae_orig_mean.ravel(),
+            mae_corrected_mean.ravel(),
+        ]
+    )
+    if mae_qm is not None:
+        viridis_values = np.concatenate(
+            [viridis_values, mae_qm.ravel(), mae_qm_mean.ravel()]
+        )
+
+    finite_viridis = viridis_values[np.isfinite(viridis_values)]
+    if finite_viridis.size > 0:
+        vmin_viridis = np.nanmin(finite_viridis)
+        vmax_viridis = np.nanmax(finite_viridis)
+    else:
+        vmin_viridis, vmax_viridis = None, None
+
+    # Compute global vmin/vmax for differences (RdBu_r)
+    diff_values = []
+    for i in range(members_to_plot):
+        mae_diff = mae_corrected[i] - mae_orig[i]
+        diff_values.append(mae_diff.ravel())
+    mae_diff_mean = mae_corrected_mean - mae_orig_mean
+    diff_values.append(mae_diff_mean.ravel())
+
+    diff_values = np.concatenate(diff_values)
+    finite_diff = diff_values[np.isfinite(diff_values)]
+    if finite_diff.size > 0:
+        max_abs_diff = np.nanmax(np.abs(finite_diff))
+        vmin_diff = -max_abs_diff
+        vmax_diff = max_abs_diff
+    else:
+        max_abs_diff = 1e-12
+        vmin_diff = -max_abs_diff
+        vmax_diff = max_abs_diff
+
     # Plot first N members
+    im_viridis = None
+    im_diff = None
+
     for i in range(members_to_plot):
         row_label = f"Member {i}"
 
         # Original
         ax = axes[i, 0]
-        im = ax.imshow(mae_orig[i], cmap="viridis", origin="lower")
+        im_viridis = ax.imshow(
+            mae_orig[i],
+            cmap="viridis",
+            origin="lower",
+            vmin=vmin_viridis,
+            vmax=vmax_viridis,
+        )
         ax.set_title(
             f"Original {row_label} (mean={np.nanmean(mae_orig[i]):.3f})",
             fontsize=9,
         )
         ax.set_xlabel("lon")
         ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=str(metric_name))
 
         # Corrected
         ax = axes[i, 1]
-        im = ax.imshow(mae_corrected[i], cmap="viridis", origin="lower")
+        im_viridis = ax.imshow(
+            mae_corrected[i],
+            cmap="viridis",
+            origin="lower",
+            vmin=vmin_viridis,
+            vmax=vmax_viridis,
+        )
         ax.set_title(
             f"RF-corrected {row_label} (mean={np.nanmean(mae_corrected[i]):.3f})",
             fontsize=9,
         )
         ax.set_xlabel("lon")
         ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=str(metric_name))
 
         # QM (if available)
         if mae_qm is not None:
             ax = axes[i, 2]
-            im = ax.imshow(mae_qm[i], cmap="viridis", origin="lower")
+            im_viridis = ax.imshow(
+                mae_qm[i],
+                cmap="viridis",
+                origin="lower",
+                vmin=vmin_viridis,
+                vmax=vmax_viridis,
+            )
             ax.set_title(
                 f"QM {row_label} (mean={np.nanmean(mae_qm[i]):.3f})",
                 fontsize=9,
             )
             ax.set_xlabel("lon")
             ax.set_ylabel("lat")
-            plt.colorbar(im, ax=ax, label=str(metric_name))
 
             # Difference RF vs orig
             ax = axes[i, 3]
             mae_diff = mae_corrected[i] - mae_orig[i]
-            max_abs = np.nanmax(np.abs(mae_diff))
-            if not np.isfinite(max_abs) or max_abs == 0:
-                max_abs = 1e-12
-            im = ax.imshow(
-                mae_diff, cmap="RdBu_r", vmin=-max_abs, vmax=max_abs, origin="lower"
+            im_diff = ax.imshow(
+                mae_diff, cmap="RdBu_r", vmin=vmin_diff, vmax=vmax_diff, origin="lower"
             )
             ax.set_title(
                 f"Δ{metric_name} (RF-orig) {row_label} (mean={np.nanmean(mae_diff):.3f})",
@@ -180,16 +235,12 @@ def plot_mae_skill_metrics(
             )
             ax.set_xlabel("lon")
             ax.set_ylabel("lat")
-            plt.colorbar(im, ax=ax, label=f"Δ{metric_name}")
         else:
             # Difference RF vs orig
             ax = axes[i, 2]
             mae_diff = mae_corrected[i] - mae_orig[i]
-            max_abs = np.nanmax(np.abs(mae_diff))
-            if not np.isfinite(max_abs) or max_abs == 0:
-                max_abs = 1e-12
-            im = ax.imshow(
-                mae_diff, cmap="RdBu_r", vmin=-max_abs, vmax=max_abs, origin="lower"
+            im_diff = ax.imshow(
+                mae_diff, cmap="RdBu_r", vmin=vmin_diff, vmax=vmax_diff, origin="lower"
             )
             ax.set_title(
                 f"Δ{metric_name} (RF-orig) {row_label} (mean={np.nanmean(mae_diff):.3f})",
@@ -197,52 +248,63 @@ def plot_mae_skill_metrics(
             )
             ax.set_xlabel("lon")
             ax.set_ylabel("lat")
-            plt.colorbar(im, ax=ax, label=f"Δ{metric_name}")
 
     # Plot ensemble mean row
     mean_row = members_to_plot
     ax = axes[mean_row, 0]
-    im = ax.imshow(mae_orig_mean, cmap="viridis", origin="lower")
+    im_viridis = ax.imshow(
+        mae_orig_mean,
+        cmap="viridis",
+        origin="lower",
+        vmin=vmin_viridis,
+        vmax=vmax_viridis,
+    )
     ax.set_title(
         f"Original Ens. Mean (mean={np.nanmean(mae_orig_mean):.3f})",
         fontsize=9,
     )
     ax.set_xlabel("lon")
     ax.set_ylabel("lat")
-    plt.colorbar(im, ax=ax, label=str(metric_name))
 
     ax = axes[mean_row, 1]
-    im = ax.imshow(mae_corrected_mean, cmap="viridis", origin="lower")
+    im_viridis = ax.imshow(
+        mae_corrected_mean,
+        cmap="viridis",
+        origin="lower",
+        vmin=vmin_viridis,
+        vmax=vmax_viridis,
+    )
     ax.set_title(
         f"RF-corrected Ens. Mean (mean={np.nanmean(mae_corrected_mean):.3f})",
         fontsize=9,
     )
     ax.set_xlabel("lon")
     ax.set_ylabel("lat")
-    plt.colorbar(im, ax=ax, label=str(metric_name))
 
     if mae_qm is not None:
         ax = axes[mean_row, 2]
-        im = ax.imshow(mae_qm_mean, cmap="viridis", origin="lower")
+        im_viridis = ax.imshow(
+            mae_qm_mean,
+            cmap="viridis",
+            origin="lower",
+            vmin=vmin_viridis,
+            vmax=vmax_viridis,
+        )
         ax.set_title(
             f"QM Ens. Mean (mean={np.nanmean(mae_qm_mean):.3f})",
             fontsize=9,
         )
         ax.set_xlabel("lon")
         ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=str(metric_name))
 
         # Ensemble mean difference
         ax = axes[mean_row, 3]
         mae_diff_mean = mae_corrected_mean - mae_orig_mean
-        max_abs_mean = np.nanmax(np.abs(mae_diff_mean))
-        if not np.isfinite(max_abs_mean) or max_abs_mean == 0:
-            max_abs_mean = 1e-12
-        im = ax.imshow(
+        im_diff = ax.imshow(
             mae_diff_mean,
             cmap="RdBu_r",
-            vmin=-max_abs_mean,
-            vmax=max_abs_mean,
+            vmin=vmin_diff,
+            vmax=vmax_diff,
             origin="lower",
         )
         ax.set_title(
@@ -251,19 +313,15 @@ def plot_mae_skill_metrics(
         )
         ax.set_xlabel("lon")
         ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=f"Δ{metric_name}")
     else:
         # Ensemble mean difference
         ax = axes[mean_row, 2]
         mae_diff_mean = mae_corrected_mean - mae_orig_mean
-        max_abs_mean = np.nanmax(np.abs(mae_diff_mean))
-        if not np.isfinite(max_abs_mean) or max_abs_mean == 0:
-            max_abs_mean = 1e-12
-        im = ax.imshow(
+        im_diff = ax.imshow(
             mae_diff_mean,
             cmap="RdBu_r",
-            vmin=-max_abs_mean,
-            vmax=max_abs_mean,
+            vmin=vmin_diff,
+            vmax=vmax_diff,
             origin="lower",
         )
         ax.set_title(
@@ -272,9 +330,17 @@ def plot_mae_skill_metrics(
         )
         ax.set_xlabel("lon")
         ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=f"Δ{metric_name}")
 
-    plt.tight_layout()
+    # Add shared colorbars
+    if im_viridis is not None:
+        cbar_ax1 = fig.add_axes([0.92, 0.55, 0.02, 0.4])
+        fig.colorbar(im_viridis, cax=cbar_ax1, label=str(metric_name))
+
+    if im_diff is not None:
+        cbar_ax2 = fig.add_axes([0.92, 0.1, 0.02, 0.4])
+        fig.colorbar(im_diff, cax=cbar_ax2, label=f"Δ{metric_name}")
+
+    plt.tight_layout(rect=[0, 0, 0.9, 1])
     out_png = (
         Path(out_dir)
         / f"{file_prefix}_skill_first{members_to_plot}_members_and_mean.png"
@@ -397,14 +463,19 @@ def plot_drought_hit_rate_maps(
         ("RF-corrected", corrected_hit_rate),
     ]
 
+    im_last = None
     for ax, (name, data) in zip(axes, panels):
-        im = ax.imshow(data, cmap="viridis", vmin=0, vmax=100, origin="lower")
+        im_last = ax.imshow(data, cmap="viridis", vmin=0, vmax=100, origin="lower")
         ax.set_title(f"{name} hit-rate (mean={np.nanmean(data):.1f}%)", fontsize=9)
         ax.set_xlabel("lon")
         ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label="Correct drought predictions [%]")
 
-    plt.tight_layout()
+    # Add single shared colorbar
+    if im_last is not None:
+        cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+        fig.colorbar(im_last, cax=cbar_ax, label="Correct drought predictions [%]")
+
+    plt.tight_layout(rect=[0, 0, 0.9, 1])
     out_png = Path(out_dir) / f"{file_prefix}.png"
     plt.savefig(str(out_png), bbox_inches="tight", dpi=150)
     out_paths.append(str(out_png))
@@ -475,26 +546,27 @@ def plot_extreme_drought_hit_histogram(
 
 def plot_example_time_means(
     baseline_ensemble,
-    qm_ensemble,
-    corrected_ensemble,
-    reference,
+    qm_ensemble=None,
+    corrected_ensemble=None,
+    reference=None,
     out_dir="plots",
     n_members_display=3,
-    n_lead_months=3,
+    n_timesteps=3,
     variable_name="CWB",
+    corrected_label="RF-corrected",
 ):
     """
-    Plot example time means over the first N lead months for first N members + ensemble mean.
-    Compares original hindcast, QM hindcast, and RF-corrected hindcast.
+    Plot timestep maps for the first n_timesteps and first n_members_display members,
+    plus one final row with the ensemble time mean over all time steps.
 
     Args:
         baseline_ensemble: xr.DataArray shape (time, member, lat, lon) - original hindcasts
-        qm_ensemble: xr.DataArray shape (time, member, lat, lon) - QM hindcasts (can be None)
-        corrected_ensemble: xr.DataArray shape (time, member, lat, lon) - RF-corrected hindcasts
+        qm_ensemble: xr.DataArray shape (time, member, lat, lon) - QM hindcasts (optional)
+        corrected_ensemble: xr.DataArray shape (time, member, lat, lon) - corrected hindcasts (optional)
         reference: xr.DataArray shape (time, lat, lon) - reference data
         out_dir: output directory for plots
         n_members_display: number of members to display
-        n_lead_months: number of lead months to average over
+        n_timesteps: number of timesteps per member to display
         variable_name: name of variable for plot titles
 
     Returns:
@@ -503,220 +575,259 @@ def plot_example_time_means(
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     out_paths = []
 
+    if "member" not in baseline_ensemble.dims:
+        baseline_ensemble = baseline_ensemble.expand_dims(member=[0])
+    if qm_ensemble is not None and "member" not in qm_ensemble.dims:
+        qm_ensemble = qm_ensemble.expand_dims(member=[0])
+    if corrected_ensemble is not None and "member" not in corrected_ensemble.dims:
+        corrected_ensemble = corrected_ensemble.expand_dims(member=[0])
+
     n_members = baseline_ensemble.sizes["member"]
     members_to_plot = min(n_members_display, n_members)
+    n_time = baseline_ensemble.sizes["time"]
+    timesteps_to_plot = min(max(1, int(n_timesteps)), n_time)
+    timestep_indices = np.arange(timesteps_to_plot)
 
-    # Compute time means over first N lead months
-    baseline_mean = baseline_ensemble.isel(time=slice(0, n_lead_months)).mean(
-        dim="time"
-    )
-    corrected_mean = corrected_ensemble.isel(time=slice(0, n_lead_months)).mean(
-        dim="time"
-    )
-    reference_mean = reference.isel(time=slice(0, n_lead_months)).mean(dim="time")
-    qm_mean = (
-        qm_ensemble.isel(time=slice(0, n_lead_months)).mean(dim="time")
-        if qm_ensemble is not None
-        else None
-    )
+    reference_time_mean = reference.mean(dim="time")
+    land_mask = np.isfinite(reference_time_mean.values)
 
-    # Land-sea mask from reference NaNs: True over land (valid), False over sea (NaN)
-    land_mask = np.isfinite(reference_mean.values)
+    baseline_ensemble = baseline_ensemble.where(land_mask)
+    if qm_ensemble is not None:
+        qm_ensemble = qm_ensemble.where(land_mask)
+    if corrected_ensemble is not None:
+        corrected_ensemble = corrected_ensemble.where(land_mask)
+    reference = reference.where(land_mask)
+    reference_time_mean = reference_time_mean.where(land_mask)
 
-    baseline_mean = baseline_mean.where(land_mask)
-    corrected_mean = corrected_mean.where(land_mask)
-    reference_mean = reference_mean.where(land_mask)
-    if qm_mean is not None:
-        qm_mean = qm_mean.where(land_mask)
+    system_columns = [("Original", baseline_ensemble)]
+    if corrected_ensemble is not None:
+        system_columns.append((corrected_label, corrected_ensemble))
+    if qm_ensemble is not None:
+        system_columns.append(("QM", qm_ensemble))
 
-    # Determine number of columns: 3 if no QM, 4 if QM available
-    n_cols = 4 if qm_mean is not None else 3
-    n_rows = members_to_plot + 1
+    n_cols = len(system_columns) + 1  # + reference column
+    n_rows = (timesteps_to_plot * members_to_plot) + 1
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 3.8 * n_rows))
     if n_rows == 1:
         axes = np.array([axes])
     if n_cols == 1:
         axes = axes.reshape(-1, 1)
 
-    title_suffix = " / QM" if qm_mean is not None else ""
+    title_parts = ["Original"]
+    if corrected_ensemble is not None:
+        title_parts.append(corrected_label)
+    if qm_ensemble is not None:
+        title_parts.append("QM")
+    title_parts.append("Reference")
     fig.suptitle(
-        f"Time means (first {n_lead_months} months) — {variable_name}: Original / RF-corrected{title_suffix} / Reference",
+        (
+            f"Example maps ({timesteps_to_plot} timesteps/member) — {variable_name}: "
+            + " / ".join(title_parts)
+        ),
         fontsize=12,
         fontweight="bold",
     )
 
-    # Get common vmin/vmax for each column
-    baseline_all = np.concatenate(
-        [baseline_mean.isel(member=i).values.ravel() for i in range(members_to_plot)]
-        + [baseline_mean.mean(dim="member").values.ravel()]
-    )
-    corrected_all = np.concatenate(
-        [corrected_mean.isel(member=i).values.ravel() for i in range(members_to_plot)]
-        + [corrected_mean.mean(dim="member").values.ravel()]
-    )
-    reference_all = reference_mean.values.ravel()
+    # Compute global limits across all columns for consistent colorbar
+    all_values = []
 
-    baseline_vmin, baseline_vmax = np.nanpercentile(baseline_all, [2, 98])
-    corrected_vmin, corrected_vmax = np.nanpercentile(corrected_all, [2, 98])
-    reference_vmin, reference_vmax = np.nanpercentile(reference_all, [2, 98])
+    for col_name, col_da in system_columns:
+        col_values = []
+        for member_idx in range(members_to_plot):
+            for timestep_idx in timestep_indices:
+                col_values.append(
+                    col_da.isel(member=member_idx, time=timestep_idx).values
+                )
+        col_values.append(col_da.mean(dim="member").mean(dim="time").values)
+        all_values.extend(np.asarray(col_values).ravel().tolist())
 
-    if qm_mean is not None:
-        qm_all = np.concatenate(
-            [qm_mean.isel(member=i).values.ravel() for i in range(members_to_plot)]
-            + [qm_mean.mean(dim="member").values.ravel()]
-        )
-        qm_vmin, qm_vmax = np.nanpercentile(qm_all, [2, 98])
+    ref_values = []
+    for timestep_idx in timestep_indices:
+        ref_values.append(reference.isel(time=timestep_idx).values)
+    ref_values.append(reference_time_mean.values)
+    all_values.extend(np.asarray(ref_values).ravel().tolist())
 
-    # Plot first N members
-    for i in range(members_to_plot):
-        row_label = f"Member {i}"
-
-        # Original
-        ax = axes[i, 0]
-        im = ax.imshow(
-            baseline_mean.isel(member=i),
-            cmap="coolwarm",
-            origin="lower",
-            vmin=baseline_vmin,
-            vmax=baseline_vmax,
-        )
-        ax.set_title(f"Original {row_label}")
-        ax.set_xlabel("lon")
-        ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=variable_name)
-
-        # Corrected (RF)
-        col_idx = 1
-        ax = axes[i, col_idx]
-        im = ax.imshow(
-            corrected_mean.isel(member=i),
-            cmap="coolwarm",
-            origin="lower",
-            vmin=corrected_vmin,
-            vmax=corrected_vmax,
-        )
-        ax.set_title(f"RF-corrected {row_label}")
-        ax.set_xlabel("lon")
-        ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=variable_name)
-
-        # QM (if available)
-        if qm_mean is not None:
-            ax = axes[i, 2]
-            im = ax.imshow(
-                qm_mean.isel(member=i),
-                cmap="coolwarm",
-                origin="lower",
-                vmin=qm_vmin,
-                vmax=qm_vmax,
-            )
-            ax.set_title(f"QM {row_label}")
-            ax.set_xlabel("lon")
-            ax.set_ylabel("lat")
-            plt.colorbar(im, ax=ax, label=variable_name)
-
-            # Reference
-            ax = axes[i, 3]
-            im = ax.imshow(
-                reference_mean,
-                cmap="coolwarm",
-                origin="lower",
-                vmin=reference_vmin,
-                vmax=reference_vmax,
-            )
-            ax.set_title(f"Reference {row_label}")
-            ax.set_xlabel("lon")
-            ax.set_ylabel("lat")
-            plt.colorbar(im, ax=ax, label=variable_name)
-        else:
-            # Reference
-            ax = axes[i, 2]
-            im = ax.imshow(
-                reference_mean,
-                cmap="coolwarm",
-                origin="lower",
-                vmin=reference_vmin,
-                vmax=reference_vmax,
-            )
-            ax.set_title(f"Reference {row_label}")
-            ax.set_xlabel("lon")
-            ax.set_ylabel("lat")
-            plt.colorbar(im, ax=ax, label=variable_name)
-
-    # Plot ensemble mean row
-    mean_row = members_to_plot
-    ax = axes[mean_row, 0]
-    im = ax.imshow(
-        baseline_mean.mean(dim="member"),
-        cmap="coolwarm",
-        origin="lower",
-        vmin=baseline_vmin,
-        vmax=baseline_vmax,
-    )
-    ax.set_title("Original Ens. Mean")
-    ax.set_xlabel("lon")
-    ax.set_ylabel("lat")
-    plt.colorbar(im, ax=ax, label=variable_name)
-
-    col_idx = 1
-    ax = axes[mean_row, col_idx]
-    im = ax.imshow(
-        corrected_mean.mean(dim="member"),
-        cmap="coolwarm",
-        origin="lower",
-        vmin=corrected_vmin,
-        vmax=corrected_vmax,
-    )
-    ax.set_title("RF-corrected Ens. Mean")
-    ax.set_xlabel("lon")
-    ax.set_ylabel("lat")
-    plt.colorbar(im, ax=ax, label=variable_name)
-
-    if qm_mean is not None:
-        ax = axes[mean_row, 2]
-        im = ax.imshow(
-            qm_mean.mean(dim="member"),
-            cmap="coolwarm",
-            origin="lower",
-            vmin=qm_vmin,
-            vmax=qm_vmax,
-        )
-        ax.set_title("QM Ens. Mean")
-        ax.set_xlabel("lon")
-        ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=variable_name)
-
-        ax = axes[mean_row, 3]
-        im = ax.imshow(
-            reference_mean,
-            cmap="coolwarm",
-            origin="lower",
-            vmin=reference_vmin,
-            vmax=reference_vmax,
-        )
-        ax.set_title("Reference Ens. Mean")
-        ax.set_xlabel("lon")
-        ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=variable_name)
+    # Compute global percentiles from all data
+    all_values_arr = np.asarray(all_values)
+    finite_values = all_values_arr[np.isfinite(all_values_arr)]
+    if finite_values.size > 0:
+        global_vmin, global_vmax = np.nanpercentile(finite_values, [2, 98])
     else:
-        ax = axes[mean_row, 2]
-        im = ax.imshow(
-            reference_mean,
+        global_vmin, global_vmax = None, None
+
+    row_idx = 0
+    im_last = None
+    for member_idx in range(members_to_plot):
+        for timestep_idx in timestep_indices:
+            for col_idx, (col_name, col_da) in enumerate(system_columns):
+                ax = axes[row_idx, col_idx]
+                im_last = ax.imshow(
+                    col_da.isel(member=member_idx, time=timestep_idx),
+                    cmap="coolwarm",
+                    origin="lower",
+                    vmin=global_vmin,
+                    vmax=global_vmax,
+                )
+                ax.set_title(f"{col_name} m={member_idx} t={int(timestep_idx)}")
+                ax.set_xlabel("lon")
+                ax.set_ylabel("lat")
+
+            ax = axes[row_idx, len(system_columns)]
+            im_last = ax.imshow(
+                reference.isel(time=timestep_idx),
+                cmap="coolwarm",
+                origin="lower",
+                vmin=global_vmin,
+                vmax=global_vmax,
+            )
+            ax.set_title(f"Reference t={int(timestep_idx)}")
+            ax.set_xlabel("lon")
+            ax.set_ylabel("lat")
+            row_idx += 1
+
+    mean_row = n_rows - 1
+    for col_idx, (col_name, col_da) in enumerate(system_columns):
+        ax = axes[mean_row, col_idx]
+        im_last = ax.imshow(
+            col_da.mean(dim="member").mean(dim="time"),
             cmap="coolwarm",
             origin="lower",
-            vmin=reference_vmin,
-            vmax=reference_vmax,
+            vmin=global_vmin,
+            vmax=global_vmax,
         )
-        ax.set_title("Reference Ens. Mean")
+        ax.set_title(f"{col_name} ensemble time mean")
         ax.set_xlabel("lon")
         ax.set_ylabel("lat")
-        plt.colorbar(im, ax=ax, label=variable_name)
 
-    plt.tight_layout()
-    out_png = Path(out_dir) / f"example_time_means_{n_lead_months}months.png"
+    ax = axes[mean_row, len(system_columns)]
+    im_last = ax.imshow(
+        reference_time_mean,
+        cmap="coolwarm",
+        origin="lower",
+        vmin=global_vmin,
+        vmax=global_vmax,
+    )
+    ax.set_title("Reference time mean")
+    ax.set_xlabel("lon")
+    ax.set_ylabel("lat")
+
+    # Add single shared colorbar for all maps
+    if im_last is not None:
+        cbar_ax = fig.add_axes([0.92, 0.1, 0.02, 0.8])
+        fig.colorbar(im_last, cax=cbar_ax, label=variable_name)
+
+    plt.tight_layout(rect=[0, 0, 0.9, 1])
+    out_png = Path(out_dir) / f"example_maps_{timesteps_to_plot}timesteps.png"
     plt.savefig(str(out_png), bbox_inches="tight", dpi=150)
     out_paths.append(str(out_png))
     plt.close()
 
     return out_paths
+
+
+    def plot_ensemble_timeseries(
+        baseline_ensemble,
+        corrected_ensemble,
+        reference,
+        out_dir="qm_plots",
+        variable_name="CWB",
+        qm_ensemble=None,
+    ):
+        """
+        Plot timeseries with ensemble mean and spread (min/max as shaded region).
+
+        Args:
+            baseline_ensemble: xr.DataArray or np.ndarray, shape (time, member, lat, lon)
+            corrected_ensemble: xr.DataArray or np.ndarray, shape (time, member, lat, lon)
+            reference: xr.DataArray or np.ndarray, shape (time, lat, lon)
+            out_dir: output directory for plots
+            variable_name: variable label for y-axis
+            qm_ensemble: xr.DataArray or np.ndarray, shape (time, member, lat, lon) (optional)
+
+        Returns:
+            list of written file paths
+        """
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        out_paths = []
+
+        # Convert to numpy if xarray
+        if hasattr(baseline_ensemble, "values"):
+            baseline_np = baseline_ensemble.values
+            time_coords = baseline_ensemble.time.values if hasattr(baseline_ensemble, "time") else np.arange(baseline_ensemble.shape[0])
+        else:
+            baseline_np = baseline_ensemble
+            time_coords = np.arange(baseline_np.shape[0])
+
+        if hasattr(corrected_ensemble, "values"):
+            corrected_np = corrected_ensemble.values
+        else:
+            corrected_np = corrected_ensemble
+
+        if hasattr(reference, "values"):
+            reference_np = reference.values
+        else:
+            reference_np = reference
+
+        if qm_ensemble is not None:
+            if hasattr(qm_ensemble, "values"):
+                qm_np = qm_ensemble.values
+            else:
+                qm_np = qm_ensemble
+        else:
+            qm_np = None
+
+        # Compute spatial mean (time, member)
+        baseline_spatial_mean = np.nanmean(baseline_np, axis=(2, 3))
+        corrected_spatial_mean = np.nanmean(corrected_np, axis=(2, 3))
+        reference_spatial_mean = np.nanmean(reference_np, axis=(1, 2))
+
+        if qm_np is not None:
+            qm_spatial_mean = np.nanmean(qm_np, axis=(2, 3))
+
+        # Compute ensemble mean and spread
+        baseline_mean = np.nanmean(baseline_spatial_mean, axis=1)
+        baseline_min = np.nanmin(baseline_spatial_mean, axis=1)
+        baseline_max = np.nanmax(baseline_spatial_mean, axis=1)
+
+        corrected_mean = np.nanmean(corrected_spatial_mean, axis=1)
+        corrected_min = np.nanmin(corrected_spatial_mean, axis=1)
+        corrected_max = np.nanmax(corrected_spatial_mean, axis=1)
+
+        if qm_np is not None:
+            qm_mean = np.nanmean(qm_spatial_mean, axis=1)
+            qm_min = np.nanmin(qm_spatial_mean, axis=1)
+            qm_max = np.nanmax(qm_spatial_mean, axis=1)
+
+        # Create figure
+        fig, ax = plt.subplots(figsize=(14, 6))
+
+        # Plot reference as black line
+        ax.plot(time_coords, reference_spatial_mean, "k-", linewidth=2.5, label="Reference", zorder=10)
+
+        # Plot Original with spread
+        ax.fill_between(time_coords, baseline_min, baseline_max, alpha=0.2, color="C0", label="Original (min/max)")
+        ax.plot(time_coords, baseline_mean, color="C0", linewidth=2, label="Original mean")
+
+        # Plot RF-corrected with spread
+        ax.fill_between(time_coords, corrected_min, corrected_max, alpha=0.2, color="C1", label="RF-corrected (min/max)")
+        ax.plot(time_coords, corrected_mean, color="C1", linewidth=2, label="RF-corrected mean")
+
+        # Plot QM with spread if available
+        if qm_np is not None:
+            ax.fill_between(time_coords, qm_min, qm_max, alpha=0.2, color="C2", label="QM (min/max)")
+            ax.plot(time_coords, qm_mean, color="C2", linewidth=2, label="QM mean")
+
+        ax.set_xlabel("Time")
+        ax.set_ylabel(variable_name)
+        ax.set_title(f"Ensemble Timeseries with Spread (min/max)")
+        ax.legend(loc="best", fontsize=10)
+        ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        out_png = Path(out_dir) / "ensemble_timeseries.png"
+        plt.savefig(str(out_png), bbox_inches="tight", dpi=150)
+        out_paths.append(str(out_png))
+        plt.close()
+
+        return out_paths

@@ -13,6 +13,7 @@ from droughtpp.analysis.qm_rf.utils.visualization import (
     plot_drought_hit_rate_maps,
     plot_extreme_drought_hit_histogram,
     plot_example_time_means,
+    plot_ensemble_timeseries,
 )
 from droughtpp.analysis.qm_rf.utils.evaluation import (
     compute_gridcell_drought_hit_rate_percent,
@@ -75,7 +76,7 @@ def evaluate_cwb(
     cwb_var: str = "CWB",
     eval_years=None,
     std_multiplier: float = 1.0,
-    plot_dir: Path | None = None,
+    plot_dir: Path | str | None = None,
     qm_hindcasts_json: Path | None = None,
 ):
 
@@ -230,6 +231,7 @@ def evaluate_cwb(
         )
 
     if plot_dir is not None:
+        plot_dir = Path(plot_dir)
         plot_dir.mkdir(parents=True, exist_ok=True)
 
         # Plot MAE / RMSE with optional QM comparison
@@ -337,6 +339,14 @@ def evaluate_cwb(
             file_prefix="extreme_drought_p10_histogram",
         )
 
+        plot_ensemble_timeseries(
+            baseline_ensemble,
+            corrected_ensemble,
+            reference,
+            out_dir=str(plot_dir),
+            qm_ensemble=qm_ensemble if qm_members else None,
+        )
+
         # Plot BSS between RF-corrected and QM if QM data available
         if bss_rf_vs_qm_upper is not None:
             plot_bss_skill_metrics(
@@ -357,5 +367,5 @@ def evaluate_cwb(
             reference,
             out_dir=str(plot_dir),
             n_members_display=3,
-            n_lead_months=3,
+            n_timesteps=3,
         )

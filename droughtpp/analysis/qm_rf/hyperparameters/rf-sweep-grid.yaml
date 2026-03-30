@@ -1,0 +1,35 @@
+project_root: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing"
+config_path: "droughtpp/analysis/qm_rf/config.yaml"
+
+sbatch:
+  partition: "gpu"
+  account: "bm1159"
+  time: "10:00:00"
+  mem: "480G"
+  constraint: "a100_80"
+  exclusive: true
+  output: "outputs/tune-rf-%j.out"
+  job_name_prefix: "qm-rf-grid"
+
+workflow_overrides:
+  - "workflow.run_qm=false"
+  - "workflow.run_qm_eval=false"
+  - "workflow.run_rf_train=true"
+  - "workflow.run_rf_evaluate=true"
+  - "workflow.evaluate_cwb=true"
+  - "workflow.evaluate_spei=false"
+
+# Define value ranges here. The submit script creates one job per Cartesian product.
+# For RF runs, xgb_* keys are ignored automatically.
+grid:
+  ml_arguments.model_type: ["rf", "xgboost"]
+  ml_arguments.n_estimators: [300, 500]
+  ml_arguments.chunk_size: [30]
+  ml_arguments.random_state: [42]
+  ml_arguments.val_fraction: [0.2]
+  ml_arguments.xgb_learning_rate: [0.05, 0.1]
+  ml_arguments.xgb_max_depth: [4, 6]
+  ml_arguments.xgb_subsample: [0.8]
+  ml_arguments.xgb_colsample_bytree: [0.8]
+  ml_arguments.xgb_min_child_weight: [1]
+  ml_arguments.xgb_eval_metric: ["rmse"]

@@ -8,6 +8,7 @@ from tqdm import tqdm
 from ..utils.evaluation import compute_qm_distributions
 from ..utils.visualization import (
     plot_qm_distributions,
+    plot_example_time_means,
     plot_mae_skill_metrics,
     plot_bss_skill_metrics,
 )
@@ -26,6 +27,7 @@ def run_qm_evaluation(
 ):
     """
     High-level helper: compute distributions, plot, and compare QM vs. original hindcasts.
+    Loads all data once, aligns to common time, then passes pre-aligned datasets to evaluation functions.
     """
     default_cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
     cfg = get_qm_rf_global_config(
@@ -33,6 +35,20 @@ def run_qm_evaluation(
         overrides=config_overrides,
         default_config=default_cfg_path,
     )
+
+    # Load reference data once
+    ref_ds = xr.open_dataset(cfg["reference_data"])
+    ref_da = ref_ds[cfg["var_name"]]
+    
+    # Load all hindcast files
+    with open(cfg["hindcasts_json"], "r") as fh:
+        hind_files = json.load(fh)
+    
+    hind_das = []
+    for fp in tqdm(hind_files, desc="Loading hindcasts"):
+        ds = xr.open_dataset(fp)
+        hind_das.append(ds[cfg["var_name"]])
+        ds.close()
 
     for leadmonth in cfg["leadmonth"]:
         qm_plot_dir = Path(cfg["plot_dir"]) / "qm" / f"lm{leadmonth}"
@@ -46,98 +62,142 @@ def run_qm_evaluation(
             / "qm_hindcast_paths.json"
         )
 
+        # Load QM files for this leadmonth
+        with open(qm_json_path, "r") as fh:
+            qm_files = json.load(fh)
+        
+        qm_das = []
+        for fp in qm_files:
+            ds = xr.open_dataset(fp)
+            qm_das.append(ds[cfg["var_name"]])
+            ds.close()
+        
+        # Compute common time across ref, hind, and qm
+        common_time = ref_da["time"].values
+        for da in hind_das:
+            common_time = np.intersect1d(common_time, da["time"].values)
+        for da in qm_das:
+            common_time = np.intersect1d(common_time, da["time"].values)
+        
+        # Subset all to common time
+        ref_subset = ref_da.sel(time=common_time)
+        hind_subsets = [da.sel(time=common_time) for da in hind_das]
+        qm_subsets = [da.sel(time=common_time) for da in qm_das]
+
         dists = compute_qm_distributions(
-            cfg["hindcasts_json"],
-            cfg["reference_data"],
-            cfg["var_name"],
-            qm_json_path=qm_json_path,
-            qm_out_dir=qm_out_dir,
+            hind_subsets=hind_subsets,
+            qm_subsets=qm_subsets,
+            ref_subset=ref_subset,
         )
         plot_qm_distributions(
             dists,
             cfg["var_name"],
             out_dir=str(qm_plot_dir),
-            n_quantiles=cfg["n_quantiles"],
+            n_quantiles=cfg["qm_arguments"]["n_quantiles"],
         )
 
         compute_qm_skill_metrics(
-            cfg["hindcasts_json"],
-            qm_json_path,
-            cfg["reference_data"],
-            cfg["var_name"],
-            qm_out_dir=qm_out_dir,
+            hind_subsets=hind_subsets,
+            qm_subsets=qm_subsets,
+            ref_subset=ref_subset,
+            var_name=cfg["var_name"],
             plot_dir=str(qm_plot_dir),
         )
+    
+    ref_ds.close()
 
 
 def compute_qm_skill_metrics(
-    json_list_path,
-    qm_json_path,
-    ref_path,
+    hind_subsets,
+    qm_subsets,
+    ref_subset,
     var_name="tas",
-    qm_out_dir=None,
     plot_dir="qm_plots",
 ):
     """
     Compute skill metrics (BSS, MAE, RMSE, mean bias) comparing
     quantile-mapped hindcasts to original hindcasts.
-    Generates visualization plots of the results.
+    
+    Args:
+        hind_subsets: list of pre-aligned, pre-subset xarray DataArrays (hindcasts)
+        qm_subsets: list of pre-aligned, pre-subset xarray DataArrays (QM)
+        ref_subset: pre-aligned, pre-subset xarray DataArray (reference)
+        var_name: variable name
+        plot_dir: output directory for plots
     """
-    with open(json_list_path, "r") as fh:
-        files = json.load(fh)
-    with open(qm_json_path, "r") as fh:
-        qm_files = json.load(fh)
-
     def _normalize_time_to_date(da):
         return da.assign_coords(time=da["time"].values.astype("datetime64[D]"))
 
-    ds_obs = xr.open_dataset(ref_path)
-    obs_da = _normalize_time_to_date(ds_obs[var_name])
-    common_time = obs_da["time"].values
+    ref_subset = _normalize_time_to_date(ref_subset)
 
-    # Load ensemble members for original and QM hindcasts
+    # Stack ensemble members from the list of DataArrays
     original_ensemble = []
     qm_ensemble = []
 
-    for fp, qm_fp in tqdm(
-        list(zip(files, qm_files)),
-        desc="Loading hindcasts for skill metrics",
+    for hind_da, qm_da in tqdm(
+        list(zip(hind_subsets, qm_subsets)),
+        desc="Preparing hindcasts for skill metrics",
     ):
-        p = Path(fp)
-
-        # Load original hindcast
-        ds_orig = xr.open_dataset(fp)
-        orig_da = _normalize_time_to_date(ds_orig[var_name])
-
-        # Load QM hindcast
-        qm_path = Path(qm_fp)
-        ds_qm = xr.open_dataset(qm_path)
-        qm_da = _normalize_time_to_date(ds_qm[var_name])
-
-        common_time = np.intersect1d(common_time, orig_da["time"].values)
-        common_time = np.intersect1d(common_time, qm_da["time"].values)
-
-        original_ensemble.append(orig_da)
+        hind_da = _normalize_time_to_date(hind_da)
+        qm_da = _normalize_time_to_date(qm_da)
+        
+        original_ensemble.append(hind_da)
         qm_ensemble.append(qm_da)
 
-        ds_orig.close()
-        ds_qm.close()
-
-    obs_da = obs_da.sel(time=common_time)
-    original_ensemble = [da.sel(time=common_time).values for da in original_ensemble]
-    qm_ensemble = [da.sel(time=common_time).values for da in qm_ensemble]
-
-    reference = obs_da.values.squeeze()  # (time, lat, lon)
-    ds_obs.close()
+    reference = ref_subset.values.squeeze()  # (time, lat, lon)
 
     # Stack to (time, ensemble, lat, lon)
-    # Assuming each file has shape (time, lat, lon)
     original_ensemble = np.squeeze(
-        np.stack(original_ensemble, axis=1)
-    )  # (time, ensemble, lat, lon)
+        np.stack([da.values for da in original_ensemble], axis=1)
+    )
     qm_ensemble = np.squeeze(
-        np.stack(qm_ensemble, axis=1)
-    )  # (time, ensemble, lat, lon)
+        np.stack([da.values for da in qm_ensemble], axis=1)
+    )
+
+    time_coord = ref_subset["time"].values
+    member_coord = np.arange(original_ensemble.shape[1])
+    lat_coord = np.arange(original_ensemble.shape[2])
+    lon_coord = np.arange(original_ensemble.shape[3])
+
+    original_da = xr.DataArray(
+        original_ensemble,
+        dims=("time", "member", "lat", "lon"),
+        coords={
+            "time": time_coord,
+            "member": member_coord,
+            "lat": lat_coord,
+            "lon": lon_coord,
+        },
+    )
+    qm_da = xr.DataArray(
+        qm_ensemble,
+        dims=("time", "member", "lat", "lon"),
+        coords={
+            "time": time_coord,
+            "member": member_coord,
+            "lat": lat_coord,
+            "lon": lon_coord,
+        },
+    )
+    reference_da = xr.DataArray(
+        reference,
+        dims=("time", "lat", "lon"),
+        coords={"time": time_coord, "lat": lat_coord, "lon": lon_coord},
+    )
+
+    original_mean_da = original_da.mean(dim="member")
+    qm_mean_da = qm_da.mean(dim="member")
+
+    plot_example_time_means(
+        baseline_ensemble=original_mean_da,
+        qm_ensemble=qm_mean_da,
+        corrected_ensemble=None,
+        reference=reference_da,
+        out_dir=str(plot_dir),
+        n_members_display=1,
+        n_timesteps=3,
+        variable_name=var_name,
+    )
 
     # Compute MAE
     mae_orig = mae_per_member_grid(original_ensemble, reference)

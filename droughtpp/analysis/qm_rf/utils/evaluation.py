@@ -10,63 +10,46 @@ from tqdm import tqdm
 
 
 def compute_qm_distributions(
-    json_list_path,
-    ref_path,
-    var_name,
-    qm_json_path=None,
-    qm_out_dir=None,
-    align_time=True,
+    hind_subsets,
+    qm_subsets,
+    ref_subset,
 ):
     """
-    For each hindcast file listed in json_list_path collect flattened numpy arrays:
+    For each hindcast/QM pair in the pre-aligned subsets, collect flattened numpy arrays:
       - original hindcast values ('orig')
-      - quantile-mapped values ('qm') (file with suffix '_qm')
-      - reference observation values ('obs')  (from ref_path)
+      - quantile-mapped values ('qm')
+      - reference values ('obs')
 
-    Returns a dict keyed by file-stem -> dict with keys: orig, qm, obs, file, qm_file
+    Args:
+        hind_subsets: list of pre-aligned, pre-subset xarray DataArrays (hindcasts)
+        qm_subsets: list of pre-aligned, pre-subset xarray DataArrays (QM)
+        ref_subset: pre-aligned, pre-subset xarray DataArray (reference)
+
+    Returns a dict keyed by file-stem with keys: orig, qm, obs, file, qm_file.
     """
 
-    with open(json_list_path, "r") as fh:
-        files = json.load(fh)
-    with open(qm_json_path, "r") as fh:
-        qm_files = json.load(fh)
-
-    ds_obs = xr.open_dataset(ref_path)
-    obs_da = ds_obs[var_name]
-
-    out = {}
-    for fp, qm_fp in tqdm(
-        list(zip(files, qm_files)),
+    dist_by_hind = {}
+    for i, (hind_da, qm_da) in tqdm(
+        enumerate(zip(hind_subsets, qm_subsets)),
         desc="Collecting distributions",
+        total=len(hind_subsets),
     ):
-        p = Path(fp)
-        base = p.stem
-        qm_path = Path(qm_fp)
+        # Use index as stem since we don't have filenames
+        stem = f"member_{i:02d}"
 
-        ds = xr.open_dataset(fp)
-        ds_qm = xr.open_dataset(qm_path)
-
-        sim_da = ds[var_name]
-        qm_da = ds_qm[var_name]
-
-        obs_vals = obs_da.values.ravel()
-        orig_vals = sim_da.values.ravel()
+        ref_vals = ref_subset.values.ravel()
+        hind_vals = hind_da.values.ravel()
         qm_vals = qm_da.values.ravel()
 
-        # filter finite only
-        out[base] = {
-            "orig": orig_vals,
+        dist_by_hind[stem] = {
+            "orig": hind_vals,
             "qm": qm_vals,
-            "obs": obs_vals,
-            "file": str(fp),
-            "qm_file": str(qm_path),
+            "obs": ref_vals,
+            "file": f"hindcast_{i}",
+            "qm_file": f"qm_{i}",
         }
 
-        ds.close()
-        ds_qm.close()
-
-    ds_obs.close()
-    return out
+    return dist_by_hind
 
 
 def load_paths_from_json(json_path: Path) -> list[Path]:

@@ -631,7 +631,6 @@ def create_example_maps(
                 transform=ccrs.PlateCarree(),
             )
         ax0.set_title(f"GT Member 1 - T{t+1}")
-        plt.colorbar(im0, ax=ax0, fraction=0.046, pad=0.04)
 
         # Output - First ensemble member
         ax1 = fig.add_subplot(
@@ -668,7 +667,6 @@ def create_example_maps(
                 transform=ccrs.PlateCarree(),
             )
         ax1.set_title(f"Output Member 1 - T{t+1}")
-        plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
 
         # GT Ensemble Mean
         ax2 = fig.add_subplot(
@@ -705,7 +703,7 @@ def create_example_maps(
                 transform=ccrs.PlateCarree(),
             )
         ax2.set_title(f"GT Ens Mean - T{t+1}")
-        plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
+
 
         # Output Ensemble Mean
         ax3 = fig.add_subplot(
@@ -742,7 +740,6 @@ def create_example_maps(
                 transform=ccrs.PlateCarree(),
             )
         ax3.set_title(f"Output Ens Mean - T{t+1}")
-        plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
 
         # Reference (if provided)
         if reference is not None:
@@ -780,7 +777,6 @@ def create_example_maps(
                     transform=ccrs.PlateCarree(),
                 )
             ax4.set_title(f"Reference - T{t+1}")
-            plt.colorbar(im4, ax=ax4, fraction=0.046, pad=0.04)
 
     # Last row: Time means
     gt_time_mean_member1 = np.nanmean(gt[0], axis=0)
@@ -828,7 +824,6 @@ def create_example_maps(
             transform=ccrs.PlateCarree(),
         )
     ax_mean0.set_title("GT Member 1 - Time Mean")
-    plt.colorbar(im_mean0, ax=ax_mean0, fraction=0.046, pad=0.04)
 
     ax_mean1 = fig.add_subplot(
         n_rows, n_cols, row_idx * n_cols + 2, projection=ccrs.PlateCarree()
@@ -864,7 +859,6 @@ def create_example_maps(
             transform=ccrs.PlateCarree(),
         )
     ax_mean1.set_title("Output Member 1 - Time Mean")
-    plt.colorbar(im_mean1, ax=ax_mean1, fraction=0.046, pad=0.04)
 
     ax_mean2 = fig.add_subplot(
         n_rows, n_cols, row_idx * n_cols + 3, projection=ccrs.PlateCarree()
@@ -900,7 +894,7 @@ def create_example_maps(
             transform=ccrs.PlateCarree(),
         )
     ax_mean2.set_title("GT Ens Mean - Time Mean")
-    plt.colorbar(im_mean2, ax=ax_mean2, fraction=0.046, pad=0.04)
+
 
     ax_mean3 = fig.add_subplot(
         n_rows, n_cols, row_idx * n_cols + 4, projection=ccrs.PlateCarree()
@@ -936,7 +930,7 @@ def create_example_maps(
             transform=ccrs.PlateCarree(),
         )
     ax_mean3.set_title("Output Ens Mean - Time Mean")
-    plt.colorbar(im_mean3, ax=ax_mean3, fraction=0.046, pad=0.04)
+
 
     if reference is not None:
         ref_time_mean = np.nanmean(reference, axis=0)
@@ -974,9 +968,12 @@ def create_example_maps(
                 transform=ccrs.PlateCarree(),
             )
         ax_mean4.set_title("Reference - Time Mean")
-        plt.colorbar(im_mean4, ax=ax_mean4, fraction=0.046, pad=0.04)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    # Add single shared colorbar
+    cbar_ax = fig.add_axes([0.92, 0.1, 0.018, 0.8])
+    fig.colorbar(im_mean3, cax=cbar_ax)
+
+    plt.tight_layout(rect=[0, 0, 0.91, 0.98])
     if save_path:
         plt.savefig(
             f"{save_path}/images/{title.replace(' ', '_')}.png",

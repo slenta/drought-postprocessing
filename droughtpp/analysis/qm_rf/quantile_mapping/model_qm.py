@@ -5,6 +5,7 @@ import xarray as xr
 import numpy as np
 from tqdm import tqdm
 from cmethods import adjust
+from IPython import embed
 
 from ..config_loader import get_qm_rf_global_config
 from ..utils.preprocessing import compute_leadmonth_mask
@@ -28,11 +29,10 @@ def quantile_map_json(
     )
 
     with open(cfg["hindcasts_json"], "r") as f:
-        files = json.load(f)
+        hind_files = json.load(f)
 
-    ds_obs = xr.open_dataset(cfg["reference_data"])
-    obs_da = ds_obs[cfg["var_name"]]
-    print(cfg["n_quantiles"])
+    ref_ds = xr.open_dataset(cfg["reference_data"])
+    ref_da = ref_ds[cfg["var_name"]]
 
     leadmonths = cfg["leadmonth"]
 
@@ -46,50 +46,51 @@ def quantile_map_json(
         qm_hindcast_paths = []
         qm_residual_paths = []
 
-        for fp in tqdm(files, desc=f"Quantile mapping lm{leadmonth}"):
-            ds = xr.open_dataset(fp)
+        for hind_fp in tqdm(hind_files, desc=f"Quantile mapping lm{leadmonth}"):
+            hind_ds = xr.open_dataset(hind_fp)
 
-            sim_da = ds[cfg["var_name"]]
-            common = np.intersect1d(obs_da["time"].values, sim_da["time"].values)
-            obs_al = obs_da.sel(time=common).squeeze()
-            sim_al = sim_da.sel(time=common).squeeze()
+            hind_da = hind_ds[cfg["var_name"]]
+            common_time = np.intersect1d(ref_da["time"].values, hind_da["time"].values)
+            hind_ds_aligned = hind_ds.sel(time=common_time)
+            ref_aligned = ref_da.sel(time=common_time).squeeze()
+            hind_aligned = hind_da.sel(time=common_time).squeeze()
 
-            month_mask = compute_leadmonth_mask(sim_al["time"].values, leadmonth)
-            selected_time = sim_al["time"].values[month_mask]
+            month_mask = compute_leadmonth_mask(hind_aligned["time"].values, leadmonth)
+            hind_ds_selected = hind_ds_aligned.isel(time=month_mask)
 
-            if len(selected_time) == 0:
-                ds.close()
-                continue
-
-            obs_month = obs_al.sel(time=selected_time)
-            sim_month = sim_al.sel(time=selected_time)
+            ref_selected = ref_aligned.isel(time=month_mask)
+            hind_selected = hind_aligned.isel(time=month_mask)
 
             adjusted = adjust(
                 method="quantile_mapping",
-                obs=obs_month,
-                simh=sim_month,
-                simp=sim_month,
-                n_quantiles=cfg["n_quantiles"],
+                obs=ref_selected,
+                simh=hind_selected,
+                simp=hind_selected,
+                n_quantiles=cfg["qm_arguments"]["n_quantiles"],
                 kind=kind,
             )
 
-            ds_out = ds.copy()
-            ds_out[cfg["var_name"]] = adjusted[cfg["var_name"]]
-            base, ext = os.path.splitext(os.path.basename(fp))
-            out_path = qm_hindcast_out_dir / f"{base}_qm{ext}"
-            ds_out.to_netcdf(str(out_path))
-            qm_hindcast_paths.append(str(out_path))
+            # Create QM output: subset original dataset to selected time, then replace variable
+            qm_ds_out = hind_ds_selected.copy()
+            qm_ds_out[cfg["var_name"]] = adjusted[cfg["var_name"]]
+            base, ext = os.path.splitext(os.path.basename(hind_fp))
+            qm_out_path = qm_hindcast_out_dir / f"{base}_qm_lm{leadmonth}{ext}"
+            qm_ds_out.to_netcdf(str(qm_out_path))
+            qm_hindcast_paths.append(str(qm_out_path))
+            qm_ds_out.close()
 
-            residual = obs_month - adjusted[cfg["var_name"]]
-            ds_res = ds.copy()
-            ds_res[cfg["var_name"]] = residual
-            out_path_res = qm_residuals_out_dir / f"{base}_qm_residual{ext}"
-            ds_res.to_netcdf(str(out_path_res))
-            qm_residual_paths.append(str(out_path_res))
-            ds_res.close()
+            # Create residual output: subset original dataset to selected time, then replace variable
+            residual = ref_selected - adjusted[cfg["var_name"]]
+            residual_ds_out = hind_ds_selected.copy()
+            residual_ds_out[cfg["var_name"]] = residual
+            residual_out_path = (
+                qm_residuals_out_dir / f"{base}_qm_residual_lm{leadmonth}{ext}"
+            )
+            residual_ds_out.to_netcdf(str(residual_out_path))
+            qm_residual_paths.append(str(residual_out_path))
+            residual_ds_out.close()
 
-            ds.close()
-            ds_out.close()
+            hind_ds.close()
 
         qm_hindcast_paths_json = (
             Path(cfg["output_dir"])
@@ -111,7 +112,7 @@ def quantile_map_json(
         with open(str(residuals_paths_json), "w") as fh:
             json.dump(qm_residual_paths, fh, indent=2)
 
-    ds_obs.close()
+    ref_ds.close()
     return str(
         Path(cfg["output_dir"])
         / "paths"

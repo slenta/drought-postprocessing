@@ -44,6 +44,15 @@ def combine_cwb_leadmonths_by_month_range(
     merged = xr.concat(month_chunks, dim="time").sortby("time")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    merged.to_netcdf(out_path)
+    merged.to_netcdf(
+        out_path,
+        encoding={
+            "time": {
+                "units": "days since 1900-01-01",
+                "calendar": "standard",
+                "dtype": "f8",
+            }
+        },
+    )
     merged.close()
     return out_path

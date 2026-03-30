@@ -1,8 +1,8 @@
 {
-  "1": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_1-1.nc",
-  "2": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_2-2.nc",
-  "3": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_3-3.nc",
-  "4": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_4-4.nc",
-  "5": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_5-5.nc",
-  "6": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_6-6.nc"
+  "1": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_1-1_invlat.nc",
+  "2": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_2-2_invlat.nc",
+  "3": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_3-3_invlat.nc",
+  "4": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_4-4_invlat.nc",
+  "5": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_5-5_invlat.nc",
+  "6": "/work/bk1318/k202208/crai/hindcast-pp/data/spei/hindcasts/precip/dwd-hindcast_precip_6-6_invlat.nc"
 }

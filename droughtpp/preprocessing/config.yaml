@@ -11,7 +11,7 @@ output_var_name: CWB
 
 workflow:
   process_hindcast: false 
-  process_reference: true 
+  process_reference: false 
   combine_hindcast_month_window: true
   intensity: true
 
