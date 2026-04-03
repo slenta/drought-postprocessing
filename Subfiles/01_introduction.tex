@@ -1,0 +1,51 @@
+% !TeX root = ../ba-lentz.tex
+
+\documentclass[ba-lentz.tex]{subfile}
+
+\begin{document}
+
+{\let\clearpage\relax \chapter{Introcution: Hybrid approaches to seasonal drought prediction}}\label{introduction}
+
+\noindent Drought is one of the meteorological extreme events that has the greatest impact on agricultural, social, and economic conditions.
+Extreme droughts occur in almost all climate zones and vary widely in duration, intensity, and regional extent.
+A distinction can be made between meteorological, agricultural, and socioeconomic droughts.
+Agricultural and socioeconomic definitions focus on the impacts of metereological droughts on society.
+However, the prediction of meteorological drought events even with state-of-the-art global climate models (GCMs) often lacks significant prediction skill.
+On seasonal time scales, GCMs are mostly used to predict precipitation and temperatures, which are consequently used to calculate drought indices, such as the Standardised Precipitation Evaporation Index (SPEI).
+Despite huge advancements in seasonal climate predictions in the last decades, climate models still possess significant biases and uncertainties when predicting drought events \parencite{wu_dynamic-lstm_2022}.
+Especially after the loss of initialization effects, GCMs still show significant errors in their dynamical representation of metereological droughts \parencite{wu_dynamic-lstm_2022}.
+In alternative approaches, statistical methods can be used to directly predict the occurence and intensity of drought events from historical data.
+However, also statistical models, such as Machine Learning (ML) or regression methods, are limited in their capability to represent nonlinear dynamics reliably \parencite{hao_seasonal_2018}.
+While being able to learn and reproduce non-linear dynamics from its training data, ML lacks interpretability and a good representation of overall distributions.
+In order to combine the strengths of both methods, hybrid approaches based on a mix of GCM prediction and ML postprocessing have recently gotten a lot of attention \parencite{li_post-processing_2021,wu_dynamic-lstm_2022}.
+Due to the sparse amount of training data and a focus on reliability and explainability, these hybrid approaches often use relatively simple ML models.
+In comparison to other fields in metereological or climate research, modern ML techniques like deep neural networks or transformer models seem to be less suited than reliable and cost-efficient solutions like random forest models \parencite{thomasson_improving_2023,feng_bias_2024,karsisto_post-processing_2025}.
+Therefore, this work will also focus on the use of random forest or as an extension boosted decision trees for the postprocessing step.
+Especially extreme gradient boosting (XGBoost) has shown to be a reliable, efficient and flexible option for forecast postprocessing \parencite{feng_bias_2024}.
+However, XGBoost has shown to sometimes struggle with extreme outliers and to correct for systematic biases in the variance and distribution of its input data \parencite{feng_bias_2024}.
+Thus, an intermediate statistical step will be performed.
+In this step, quantile mapping (QM) matches the original hindcasts distribution to that of the reference data.
+Since QM cannot by design correct the trend or time evolution of its input data, the combination of QM and XGBoost should be able to account for each others weaknesses.
+Thus I hope with the framework of QM plus a ML prediction of the remaining residuals to reach an overall significant improvement of the original prediction skill.\\
+Despite the success of ML postprocessing in some fields of climate science, they have not yet been successfully applied to seasonal predictions.
+Especially the prediction of extreme events, such as droughts, has only recently gotten more attention in seasonal prediction systems.
+Thus, there is still significant room for improvement, especially in the postprocessing of these predictions.
+The DWD for example does not possess an operational seasonal forecast postprocessing including ML techniques to this day. \\
+This work tries to close this gap.
+By combining dynamical predictions of climatic variables on seasonal timescales with a statistical postprocessing step, I will analyse if ML models can be used in order to improve seasonal drought prediction.
+There are two possibilities to improve drought prediction.
+Either one can deterministically postprocess an entire prediction of a chosen drought indicator.
+For this work the SPEI is chosen as a metric for drought severity, including both precipitation and potential evapotranspiration (PET) in its calculation.
+In this way the postprocessing step aims at improving the overall forecast skill of the SPEI, without specifically targeting the occurence of drought events.
+Alternatively, the occurence of individual extreme drought events can be first extracted from the chosen drought index.
+Consequently, the ML step can focus on just improving the forecast of these extreme events by either predicting their intensity or by probabilistically predicting the absolute occurence of a drought event above a certain threshold.
+In this work both options will be tried out and evaluated in regard to their potential for improvement of prediction quality. \\
+In order to come to an informed conclusion, first an overview of the utilized methods and data will be given in chapter \ref{data_methods}.
+Both the original dynamical hindcasts and the observational data used for the ML training will be descibed in detail in section \ref{data}.
+The used ML framework as well as additional post- and preprocessing steps will be documented in \ref{methods}.
+Afterwards, the results of the consequent analysis will be shown in chapter \ref{results}.
+At last, a summary and conclusion will be drawn in chapter \ref{summary_conclusion} in regard to this hybrid approach's ability to significantly improve the seasonal prediction of drought events.
+
+
+
+\end{document}

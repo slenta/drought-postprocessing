@@ -1,0 +1,134 @@
+\documentclass[11pt,a4paper, bibliography=totocnumbered]{scrreport}
+\usepackage[ngerman]{babel}	%sprache
+\usepackage[utf8]{inputenc}%utf8, für zeichen, umlaute etc.
+\usepackage[a4paper,lmargin={2cm},rmargin={2cm},tmargin={2cm},bmargin = {2.5cm}]{geometry}	%Abstände, usw. ändern
+\usepackage{amsmath}	%mathe
+\usepackage{subfiles}
+\usepackage{amssymb}	%mathe
+\usepackage{nicefrac}	%erlaubt z.B. schräge brüche(\nicefrac)
+\usepackage{graphicx}% Graphikpaket (für PNG,GIF,JPG)
+\usepackage{float,rotating}%Option für fixe Position; Drehung von Abbildungen etc.
+\usepackage{setspace}%zeilenabstand 
+\usepackage{hyperref}%klickbare links
+\usepackage{gensymb}%z.B. Gradzeichen
+\usepackage{wrapfig} %gibt wrapfigures
+\usepackage{epstopdf} % eps dateien einbinden
+\usepackage{dsfont}
+\usepackage{subcaption}
+\usepackage{MnSymbol}	%für Kreisbogenzeichen
+\usepackage{subfiles}
+\usepackage{tabularx}
+\usepackage{csquotes}
+\usepackage{pdfpages}
+\usepackage{acronym} % acronyms
+\usepackage[title]{appendix}%
+\usepackage{rotating}
+\usepackage{relsize,etoolbox}% http://ctan.org/pkg/{relsize,etoolbox}
+\usepackage{scrhack}
+\AtBeginEnvironment{quotation}{\smaller\itshape\/}
+
+
+\usepackage{varioref}
+\labelformat{figure}{Fig. #1}
+\usepackage{caption}
+\DeclareCaptionLabelFormat{custom}{\textbf{Fig.#2 \textbar{}}}
+\DeclareCaptionFormat{custom}{%
+	\fontsize{10}{12}\selectfont%
+	#1 #3%
+}
+\newcommand{\R}{\grqq}
+\newcommand{\A}{\glqq}
+
+\captionsetup{
+	labelformat=custom,
+	format=custom,
+	singlelinecheck=false,
+	labelsep=space
+}
+\linespread{1.2}
+
+\PassOptionsToPackage{
+	natbib=true,
+	style=authoryear,
+	hyperref=true,
+	backend=bibtex,
+	giveninits=true,
+	uniquename=init,
+	maxcitenames=2,
+	parentracker=true,
+	url=false,
+	doi=true,
+	isbn=false,
+	eprint=false,
+}{biblatex}
+\usepackage{biblatex}
+\addbibresource{ba-bib.bib} % when using backend=bibtex
+
+%\usepackage{apacite}
+
+
+
+\begin{document}
+
+
+\begin{titlepage}
+
+	\vspace*{5cm}
+
+	\begin{centering}
+
+		\Huge\textbf{Seasonal Drought Prediction in Africa Utilizing a Combined Statistical and ML Approach}
+
+	\end{centering}
+
+	\vspace*{6cm}
+
+	\noindent Autor: Simon Lentz \\
+	Matrikelnummer: 7374279 \\
+	E-Mail: simon.lentz@studium.uni-hamburg.de \\
+	5. Fachsemester \\
+	Institut für Geografie \\
+	Universität Hamburg \\
+	Betreuende: Olena Dubovyk, Johanna Baehr
+
+
+
+
+	\vspace{1cm}
+
+\end{titlepage}
+
+%...TableOfContents..........................................
+
+\newpage
+\begin{doublespacing}
+	\tableofcontents
+\end{doublespacing}
+
+\thispagestyle{empty}
+\addtocounter{page}{-2}
+\newpage
+
+%...MainPart..........................................
+
+\subfile{./Subfiles/01_introduction.tex}
+
+\subfile{./Subfiles/02_data_methods.tex}
+
+\subfile{./Subfiles/03_results.tex}
+
+\subfile{./Subfiles/04_summary_conclusion.tex}
+
+
+
+% ---Bibliography---------------------------------------------
+
+\newpage
+\printbibliography\newpage
+
+\includepdf{./Subfiles/ErklarungUnterschrieben.pdf}
+
+
+
+
+\end{document}

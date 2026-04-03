@@ -1,0 +1,919 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated as
+% required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+\datalist[entry]{nyt/global//global/global}
+  \entry{feng_bias_2024}{article}{}
+    \name{author}{6}{}{%
+      {{hash=FS}{%
+         family={Feng},
+         familyi={F\bibinitperiod},
+         given={Songjiang},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=TY}{%
+         family={Tan},
+         familyi={T\bibinitperiod},
+         given={Yan},
+         giveni={Y\bibinitperiod},
+      }}%
+      {{hash=KJ}{%
+         family={Kang},
+         familyi={K\bibinitperiod},
+         given={Junfeng},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=ZQ}{%
+         family={Zhong},
+         familyi={Z\bibinitperiod},
+         given={Quanjia},
+         giveni={Q\bibinitperiod},
+      }}%
+      {{hash=LY}{%
+         family={Li},
+         familyi={L\bibinitperiod},
+         given={Yanjie},
+         giveni={Y\bibinitperiod},
+      }}%
+      {{hash=DR}{%
+         family={Ding},
+         familyi={D\bibinitperiod},
+         given={Ruiqiang},
+         giveni={R\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{FS+1}
+    \strng{fullhash}{FSTYKJZQLYDR1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2024}
+    \field{labeldatesource}{}
+    \field{sortinit}{F}
+    \field{sortinithash}{F}
+    \field{abstract}{%
+    In this study, the extreme gradient boosting (XGBoost) algorithm is used to correct tropical cyclone (TC) intensity in ensemble forecast data from the Typhoon Ensemble Data Assimilation and Prediction System (TEDAPS) at the Shanghai Typhoon Institute (STI), China Meteorological Administration (CMA). Results show that the forecast accuracy of TC intensity may be improved substantially using the XGBoost algorithm, especially when compared with a simple ensemble average of all members in the ensemble forecast [as depicted by the ensemble average (EnsAve) algorithm in this study]. The forecast errors for maximum wind speed (MWS) and minimum sea level pressure (MSLP) have been reduced by a signiﬁcant margin, ranging from 6.3\% to 18.4\% for MWS and from 4\% to 14.9\% for MSLP, respectively. The performance of the XGBoost algorithm is overall better than that of the EnsAve algorithm, although there are a few samples when it is worse. The bias analysis shows that TEDAPS underpredicts the MWS and overpredicts the MSLP, meaning that the TEDAPS underestimates TC intensity. However, the XGBoost algorithm can reduce the bias to improve the forecast accuracy of TC intensity. Speciﬁcally, it achieves a reduction of over 20\% in forecast errors for both the MWS and MSLP of typhoons compared to the EnsAve algorithm, indicating the XGBoost algorithm’s particular advantage in forecasting intense TCs. These results indicate that the TC intensity forecast can be substantially improved using the XGBoost algorithm, relative to the EnsAve algorithm.%
+    }
+    \verb{doi}
+    \verb 10.1175/WAF-D-23-0159.1
+    \endverb
+    \field{issn}{0882-8156, 1520-0434}
+    \field{number}{2}
+    \field{pages}{323\bibrangedash 332}
+    \field{title}{Bias {Correction} of {Tropical} {Cyclone} {Intensity} for {Ensemble} {Forecasts} {Using} the {XGBoost} {Method}}
+    \verb{url}
+    \verb https://journals.ametsoc.org/view/journals/wefo/39/2/WAF-D-23-0159.1.
+    \verb xml
+    \endverb
+    \field{volume}{39}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/MHRLCYQ5/Feng et al. - 2024 - Bias Cor
+    \verb rection of Tropical Cyclone Intensity for Ensemble Forecasts Using th
+    \verb e XGBoost Method.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Weather and Forecasting}
+    \field{month}{02}
+    \field{year}{2024}
+    \field{urlday}{31}
+    \field{urlmonth}{03}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{frohlich_german_2021}{article}{}
+    \name{author}{10}{}{%
+      {{hash=FK}{%
+         family={Fröhlich},
+         familyi={F\bibinitperiod},
+         given={Kristina},
+         giveni={K\bibinitperiod},
+      }}%
+      {{hash=DM}{%
+         family={Dobrynin},
+         familyi={D\bibinitperiod},
+         given={Mikhail},
+         giveni={M\bibinitperiod},
+      }}%
+      {{hash=IK}{%
+         family={Isensee},
+         familyi={I\bibinitperiod},
+         given={Katharina},
+         giveni={K\bibinitperiod},
+      }}%
+      {{hash=GC}{%
+         family={Gessner},
+         familyi={G\bibinitperiod},
+         given={Claudia},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=PA}{%
+         family={Paxian},
+         familyi={P\bibinitperiod},
+         given={Andreas},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=PH}{%
+         family={Pohlmann},
+         familyi={P\bibinitperiod},
+         given={Holger},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=HH}{%
+         family={Haak},
+         familyi={H\bibinitperiod},
+         given={Helmuth},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=BS}{%
+         family={Brune},
+         familyi={B\bibinitperiod},
+         given={Sebastian},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=FB}{%
+         family={Früh},
+         familyi={F\bibinitperiod},
+         given={Barbara},
+         giveni={B\bibinitperiod},
+      }}%
+      {{hash=BJ}{%
+         family={Baehr},
+         familyi={B\bibinitperiod},
+         given={Johanna},
+         giveni={J\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{FK+1}
+    \strng{fullhash}{FKDMIKGCPAPHHHBSFBBJ1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2021}
+    \field{labeldatesource}{}
+    \field{sortinit}{F}
+    \field{sortinithash}{F}
+    \field{note}{Publisher: Wiley Online Library}
+    \field{number}{2}
+    \field{title}{The {German} climate forecast system: {GCFS}}
+    \field{volume}{13}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/56YG2QWR/Frohlich et al. - The German
+    \verb Climate Forecast System GCFS.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Journal of Advances in Modeling Earth Systems}
+    \field{year}{2021}
+  \endentry
+
+  \entry{hao_seasonal_2018}{article}{}
+    \name{author}{3}{}{%
+      {{hash=HZ}{%
+         family={Hao},
+         familyi={H\bibinitperiod},
+         given={Zengchao},
+         giveni={Z\bibinitperiod},
+      }}%
+      {{hash=SVP}{%
+         family={Singh},
+         familyi={S\bibinitperiod},
+         given={Vijay\bibnamedelima P.},
+         giveni={V\bibinitperiod\bibinitdelim P\bibinitperiod},
+      }}%
+      {{hash=XY}{%
+         family={Xia},
+         familyi={X\bibinitperiod},
+         given={Youlong},
+         giveni={Y\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{HZ+1}
+    \strng{fullhash}{HZSVPXY1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{shorttitle}
+    \field{labelyear}{2018}
+    \field{labeldatesource}{}
+    \field{sortinit}{H}
+    \field{sortinithash}{H}
+    \field{abstract}{%
+    Drought prediction is of critical importance to early warning for drought managements. This review provides a synthesis of drought prediction based on statistical, dynamical, and hybrid methods. Statistical drought prediction is achieved by modeling the relationship between drought indices of interest and a suite of potential predictors, including large-scale climate indices, local climate variables, and land initial conditions. Dynamical meteorological drought prediction relies on seasonal climate forecast from general circulation models (GCMs), which can be employed to drive hydrological models for agricultural and hydrological drought prediction with the predictability determined by both climate forcings and initial conditions. Challenges still exist in drought prediction at long lead time and under a changing environment resulting from natural and anthropogenic factors. Future research prospects to improve drought prediction include, but are not limited to, high-quality data assimilation, improved model development with key processes related to drought occurrence, optimal ensemble forecast to select or weight ensembles, and hybrid drought prediction to merge statistical and dynamical forecasts.%
+    }
+    \verb{doi}
+    \verb 10.1002/2016RG000549
+    \endverb
+    \field{issn}{8755-1209, 1944-9208}
+    \field{number}{1}
+    \field{pages}{108\bibrangedash 141}
+    \field{shorttitle}{Seasonal {Drought} {Prediction}}
+    \field{title}{Seasonal {Drought} {Prediction}: {Advances}, {Challenges}, and {Future} {Prospects}}
+    \verb{url}
+    \verb https://agupubs.onlinelibrary.wiley.com/doi/10.1002/2016RG000549
+    \endverb
+    \field{volume}{56}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/YG7JW8Q3/Hao et al. - 2018 - Seasonal
+    \verb Drought Prediction Advances, Challenges, and Future Prospects.pdf:app
+    \verb lication/pdf
+    \endverb
+    \field{journaltitle}{Reviews of Geophysics}
+    \field{month}{03}
+    \field{year}{2018}
+    \field{urlday}{30}
+    \field{urlmonth}{12}
+    \field{urlyear}{2025}
+  \endentry
+
+  \entry{kadow_artificial_2020}{article}{}
+    \name{author}{3}{}{%
+      {{hash=KC}{%
+         family={Kadow},
+         familyi={K\bibinitperiod},
+         given={Christopher},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=HDM}{%
+         family={Hall},
+         familyi={H\bibinitperiod},
+         given={David\bibnamedelima Matthew},
+         giveni={D\bibinitperiod\bibinitdelim M\bibinitperiod},
+      }}%
+      {{hash=UU}{%
+         family={Ulbrich},
+         familyi={U\bibinitperiod},
+         given={Uwe},
+         giveni={U\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{KC+1}
+    \strng{fullhash}{KCHDMUU1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2020}
+    \field{labeldatesource}{}
+    \field{sortinit}{K}
+    \field{sortinithash}{K}
+    \verb{doi}
+    \verb 10.1038/s41561-020-0582-5
+    \endverb
+    \field{issn}{1752-0894, 1752-0908}
+    \field{number}{6}
+    \field{pages}{408\bibrangedash 413}
+    \field{title}{Artificial intelligence reconstructs missing climate information}
+    \verb{url}
+    \verb https://www.nature.com/articles/s41561-020-0582-5
+    \endverb
+    \field{volume}{13}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/D7JXDVZQ/Kadow et al. - 2020 - Artific
+    \verb ial intelligence reconstructs missing climate information.pdf:applica
+    \verb tion/pdf
+    \endverb
+    \field{journaltitle}{Nature Geoscience}
+    \field{month}{06}
+    \field{year}{2020}
+    \field{urlday}{03}
+    \field{urlmonth}{01}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{karsisto_post-processing_2025}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=KV}{%
+         family={Karsisto},
+         familyi={K\bibinitperiod},
+         given={Virve},
+         giveni={V\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{KV1}
+    \strng{fullhash}{KV1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2025}
+    \field{labeldatesource}{}
+    \field{sortinit}{K}
+    \field{sortinithash}{K}
+    \field{abstract}{%
+    Reliable road weather forecasts are crucial for ensuring road safety and optimizing road maintenance. They help to time road saltings effectively and to keep roads ice-free while avoiding unnecessary saltings. The Finnish Meteorological Institute produces road weather forecasts using a specified road weather model. This model is a one-dimensional heat balance model that utilizes atmospheric forecast from large-scale numerical weather prediction (NWP) model as input. One of the most important outputs of the road weather model is the road surface temperature, as it is essential to know whether it is below or above freezing.Neither NWP forecasts nor the physics of the road weather model are perfect, which leads to errors in the forecasts. However, it is possible to reduce these errors by using machine learning model to learn from the past behavior of the forecast errors under different weather conditions. In this study, we develop a machine learning model using XGBoost (Extreme Gradient Boosting) to predict the difference between observed and forecasted road surface temperatures. This model can then be used to correct forecast errors. XGBoost is a type of gradient boosting algorithm that builds an ensemble of decision trees sequentially, where each new tree focuses on correcting the errors made by the previous ones. Unlike random forests, which aggregate the predictions of many independent trees, gradient boosting improves prediction accuracy by iteratively minimizing error.The road weather model was run to road weather station points in Finland using atmospheric forecasts from the MEPS (MetCoOp Ensemble Prediction System) control member as forcing. Road weather station observations were used in the model initialization. The forecasts were done for each control member run, which means 8 forecasts for each day. The XGBoost model was trained with data from four winter periods (September-May) between 2020 and 2024. The winter period of 2024-2025 will be used for the final evaluation of the model's performance. The variables used as predictors contained forecasted atmospheric values from MEPS, forecasted road surface temperatures as well as time- and location-specific variables. Before training or evaluation, data quality control was performed on the data to remove outliers and missing values. Hyperparameter tuning is being performed to optimize the model’s performance. Although the tuning and training process is ongoing, initial results show that the machine learning model can reduce forecast error. The mean absolute error (MAE) of road surface temperature predictions across all lead times (1–62 hours) was 1.7 °C on the training set. After optimizing the number and depth of decision trees, the MAE decreased to 1.5 °C. This error estimate is based on four-fold cross-validation, where in each fold, one winter period served as the validation set while the remaining periods were used for training.%
+    }
+    \verb{doi}
+    \verb 10.5194/ems2025-188
+    \endverb
+    \field{title}{Post-{Processing} {Surface} {Temperature} {Forecasts} with {XGBoost}}
+    \verb{url}
+    \verb https://meetingorganizer.copernicus.org/EMS2025/EMS2025-188.html
+    \endverb
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/3C4NR7JQ/Karsisto - 2025 - Post-Proces
+    \verb sing Surface Temperature Forecasts with XGBoost.pdf:application/pdf
+    \endverb
+    \field{month}{07}
+    \field{year}{2025}
+    \field{urlday}{31}
+    \field{urlmonth}{03}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{lentz_improving_2025}{article}{}
+    \name{author}{4}{}{%
+      {{hash=LS}{%
+         family={Lentz},
+         familyi={L\bibinitperiod},
+         given={Simon},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=BS}{%
+         family={Brune},
+         familyi={B\bibinitperiod},
+         given={Sebastian},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=KC}{%
+         family={Kadow},
+         familyi={K\bibinitperiod},
+         given={Christopher},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=BJ}{%
+         family={Baehr},
+         familyi={B\bibinitperiod},
+         given={Johanna},
+         giveni={J\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{LS+1}
+    \strng{fullhash}{LSBSKCBJ1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2025}
+    \field{labeldatesource}{}
+    \field{sortinit}{L}
+    \field{sortinithash}{L}
+    \field{abstract}{%
+    Oceanic subsurface observations are sparse and lead to large uncertainties in any model-based estimate. We investigate the applicability of transfer learning based neural networks to reconstruct North Atlantic temperatures in times with sparse observations. Our network is trained on a time period with abundant observations to learn realistic physical behavior. Evaluating it within a consistent data assimilation framework, this network learns and reproduces its training data’s physical patterns. Additionally, the network is able to transfer these patterns towards a historical ocean heat content estimate in times with sparse observations. Consequently, with infrequent input data, machine learning reconstructions exhibit similar physical structures, while correcting for known errors compared to state-of-the-art data assimilation products. In this manner, transfer learning can impact the initialization and evaluation of climate hindcasts. Furthermore, by exhibiting the capability to accurately transfer results from high to low-frequencies, transfer learning based neural networks showcase their relevance in mixed-frequency measurements beyond climate science.%
+    }
+    \verb{doi}
+    \verb 10.1038/s41598-025-86374-4
+    \endverb
+    \field{issn}{2045-2322}
+    \field{number}{1}
+    \field{pages}{2640}
+    \field{title}{Improving ocean reanalyses of observationally sparse regions with transfer learning}
+    \verb{url}
+    \verb https://www.nature.com/articles/s41598-025-86374-4
+    \endverb
+    \field{volume}{15}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/NALEF2A6/Lentz et al. - 2025 - Improvi
+    \verb ng ocean reanalyses of observationally sparse regions with transfer l
+    \verb earning.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Scientific Reports}
+    \field{month}{01}
+    \field{year}{2025}
+    \field{urlday}{03}
+    \field{urlmonth}{01}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{li_post-processing_2021}{article}{}
+    \name{author}{6}{}{%
+      {{hash=LY}{%
+         family={Li},
+         familyi={L\bibinitperiod},
+         given={Yuan},
+         giveni={Y\bibinitperiod},
+      }}%
+      {{hash=WZ}{%
+         family={Wu},
+         familyi={W\bibinitperiod},
+         given={Zhiyong},
+         giveni={Z\bibinitperiod},
+      }}%
+      {{hash=HH}{%
+         family={He},
+         familyi={H\bibinitperiod},
+         given={Hai},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=WQJ}{%
+         family={Wang},
+         familyi={W\bibinitperiod},
+         given={Quan\bibnamedelima J.},
+         giveni={Q\bibinitperiod\bibinitdelim J\bibinitperiod},
+      }}%
+      {{hash=XH}{%
+         family={Xu},
+         familyi={X\bibinitperiod},
+         given={Huating},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=LG}{%
+         family={Lu},
+         familyi={L\bibinitperiod},
+         given={Guihua},
+         giveni={G\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{LY+1}
+    \strng{fullhash}{LYWZHHWQJXHLG1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2021}
+    \field{labeldatesource}{}
+    \field{sortinit}{L}
+    \field{sortinithash}{L}
+    \field{abstract}{%
+    Post-processing outputs from Coupled Global Circulation Models (CGCM) is required to generate skillful and reliable sub-seasonal precipitation forecasts. However, it is not currently known at what spatiotemporal scale can sub-seasonal precipitation forecasts be improved after post-processing. In this study, a Bayesian joint probability (BJP) method is used to post-process European Centre for Medium-Range Weather Forecasts (ECMWF) subseasonal precipitation forecasts at various spatiotemporal scales across China during the boreal summer monsoon. The relationships between forecasts and observations are built at daily, weekly, and fortnight temporal scales for each grid cell and each hydroclimatic region after normalization. The results suggest that the skills and reliability of ECMWF raw daily precipitation forecasts are improved after post-processing. The forecast skills are further improved at larger spatial scales or longer temporal scales, especially in the Upper and Middle Yangtze River, Southeast Rivers, and Pearl River. Although the forecast skills decrease rapidly as lead time increases, the uncertainty spread of the BJP calibrated sub-seasonal precipitation forecasts is highly reliable at all lead times and spatiotemporal scales. This work will help to realize the potential of CGCM forecasts at sub-seasonal time scales. Future works will investigate the benefits of post-processing precipitation forecasts for sub-seasonal streamflow predictions.%
+    }
+    \verb{doi}
+    \verb 10.1016/j.jhydrol.2020.125742
+    \endverb
+    \field{issn}{00221694}
+    \field{pages}{125742}
+    \field{title}{Post-processing sub-seasonal precipitation forecasts at various spatiotemporal scales across {China} during boreal summer monsoon}
+    \verb{url}
+    \verb https://linkinghub.elsevier.com/retrieve/pii/S0022169420312038
+    \endverb
+    \field{volume}{598}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/3M3A5HAJ/Li et al. - 2021 - Post-proce
+    \verb ssing sub-seasonal precipitation forecasts at various spatiotemporal
+    \verb scales across China d.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Journal of Hydrology}
+    \field{month}{07}
+    \field{year}{2021}
+    \field{urlday}{30}
+    \field{urlmonth}{12}
+    \field{urlyear}{2025}
+  \endentry
+
+  \entry{liu_image_2018}{misc}{}
+    \name{author}{6}{}{%
+      {{hash=LG}{%
+         family={Liu},
+         familyi={L\bibinitperiod},
+         given={Guilin},
+         giveni={G\bibinitperiod},
+      }}%
+      {{hash=RFA}{%
+         family={Reda},
+         familyi={R\bibinitperiod},
+         given={Fitsum\bibnamedelima A.},
+         giveni={F\bibinitperiod\bibinitdelim A\bibinitperiod},
+      }}%
+      {{hash=SKJ}{%
+         family={Shih},
+         familyi={S\bibinitperiod},
+         given={Kevin\bibnamedelima J.},
+         giveni={K\bibinitperiod\bibinitdelim J\bibinitperiod},
+      }}%
+      {{hash=WTC}{%
+         family={Wang},
+         familyi={W\bibinitperiod},
+         given={Ting-Chun},
+         giveni={T\bibinithyphendelim C\bibinitperiod},
+      }}%
+      {{hash=TA}{%
+         family={Tao},
+         familyi={T\bibinitperiod},
+         given={Andrew},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=CB}{%
+         family={Catanzaro},
+         familyi={C\bibinitperiod},
+         given={Bryan},
+         giveni={B\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \list{publisher}{1}{%
+      {arXiv}%
+    }
+    \keyw{Computer Science - Computer Vision and Pattern Recognition}
+    \strng{namehash}{LG+1}
+    \strng{fullhash}{LGRFASKJWTCTACB1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2018}
+    \field{labeldatesource}{}
+    \field{sortinit}{L}
+    \field{sortinithash}{L}
+    \field{abstract}{%
+    Existing deep learning based image inpainting methods use a standard convolutional network over the corrupted image, using convolutional ﬁlter responses conditioned on both valid pixels as well as the substitute values in the masked holes (typically the mean value). This often leads to artifacts such as color discrepancy and blurriness. Postprocessing is usually used to reduce such artifacts, but are expensive and may fail. We propose the use of partial convolutions, where the convolution is masked and renormalized to be conditioned on only valid pixels. We further include a mechanism to automatically generate an updated mask for the next layer as part of the forward pass. Our model outperforms other methods for irregular masks. We show qualitative and quantitative comparisons with other methods to validate our approach.%
+    }
+    \verb{doi}
+    \verb 10.48550/arXiv.1804.07723
+    \endverb
+    \field{note}{arXiv:1804.07723 [cs]}
+    \field{title}{Image {Inpainting} for {Irregular} {Holes} {Using} {Partial} {Convolutions}}
+    \verb{url}
+    \verb http://arxiv.org/abs/1804.07723
+    \endverb
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/8I3MMMRZ/Liu et al. - 2018 - Image Inp
+    \verb ainting for Irregular Holes Using Partial Convolutions.pdf:applicatio
+    \verb n/pdf
+    \endverb
+    \field{annotation}{%
+    Comment: Update: camera-ready; L1 loss is size-averaged; code of partial conv layer: https://github.com/NVIDIA/partialconv. Published at ECCV 2018%
+    }
+    \field{month}{12}
+    \field{year}{2018}
+    \field{urlday}{03}
+    \field{urlmonth}{01}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{maidment_tamsat_2020}{incollection}{}
+    \name{author}{4}{}{%
+      {{hash=MR}{%
+         family={Maidment},
+         familyi={M\bibinitperiod},
+         given={Ross},
+         giveni={R\bibinitperiod},
+      }}%
+      {{hash=BE}{%
+         family={Black},
+         familyi={B\bibinitperiod},
+         given={Emily},
+         giveni={E\bibinitperiod},
+      }}%
+      {{hash=GH}{%
+         family={Greatrex},
+         familyi={G\bibinitperiod},
+         given={Helen},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=YM}{%
+         family={Young},
+         familyi={Y\bibinitperiod},
+         given={Matthew},
+         giveni={M\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {Springer}%
+    }
+    \strng{namehash}{MR+1}
+    \strng{fullhash}{MRBEGHYM1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2020}
+    \field{labeldatesource}{}
+    \field{sortinit}{M}
+    \field{sortinithash}{M}
+    \field{booktitle}{Satellite {Precipitation} {Measurement}: {Volume} 1}
+    \field{pages}{393\bibrangedash 408}
+    \field{title}{Tamsat}
+    \field{year}{2020}
+  \endentry
+
+  \entry{paxian_dwd_2023}{article}{}
+    \name{author}{10}{}{%
+      {{hash=PA}{%
+         family={Paxian},
+         familyi={P\bibinitperiod},
+         given={A},
+         giveni={A},
+      }}%
+      {{hash=MB}{%
+         family={Mannig},
+         familyi={M\bibinitperiod},
+         given={B},
+         giveni={B},
+      }}%
+      {{hash=TM}{%
+         family={Tivig},
+         familyi={T\bibinitperiod},
+         given={M},
+         giveni={M},
+      }}%
+      {{hash=RK}{%
+         family={Reinhardt},
+         familyi={R\bibinitperiod},
+         given={K},
+         giveni={K},
+      }}%
+      {{hash=IK}{%
+         family={Isensee},
+         familyi={I\bibinitperiod},
+         given={K},
+         giveni={K},
+      }}%
+      {{hash=PA}{%
+         family={Pasternack},
+         familyi={P\bibinitperiod},
+         given={Alexander},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=HA}{%
+         family={Hoff},
+         familyi={H\bibinitperiod},
+         given={A},
+         giveni={A},
+      }}%
+      {{hash=PK}{%
+         family={Pankatz},
+         familyi={P\bibinitperiod},
+         given={K},
+         giveni={K},
+      }}%
+      {{hash=BS}{%
+         family={Buchholz},
+         familyi={B\bibinitperiod},
+         given={S},
+         giveni={S},
+      }}%
+      {{hash=WS}{%
+         family={Wehring},
+         familyi={W\bibinitperiod},
+         given={S},
+         giveni={S},
+      }}%
+    }
+    \strng{namehash}{PA+1}
+    \strng{fullhash}{PAMBTMRKIKPAHAPKBSWS1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2023}
+    \field{labeldatesource}{}
+    \field{sortinit}{P}
+    \field{sortinithash}{P}
+    \field{title}{The {DWD} climate predictions website: {Towards} a seamless outlook based on subseasonal, seasonal and decadal predictions}
+    \field{volume}{30}
+    \field{journaltitle}{Climate Services}
+    \field{year}{2023}
+  \endentry
+
+  \entry{soci_era5_2024}{article}{}
+    \name{author}{16}{}{%
+      {{hash=SC}{%
+         family={Soci},
+         familyi={S\bibinitperiod},
+         given={Cornel},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=HH}{%
+         family={Hersbach},
+         familyi={H\bibinitperiod},
+         given={Hans},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=SA}{%
+         family={Simmons},
+         familyi={S\bibinitperiod},
+         given={Adrian},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=PP}{%
+         family={Poli},
+         familyi={P\bibinitperiod},
+         given={Paul},
+         giveni={P\bibinitperiod},
+      }}%
+      {{hash=BB}{%
+         family={Bell},
+         familyi={B\bibinitperiod},
+         given={Bill},
+         giveni={B\bibinitperiod},
+      }}%
+      {{hash=BP}{%
+         family={Berrisford},
+         familyi={B\bibinitperiod},
+         given={Paul},
+         giveni={P\bibinitperiod},
+      }}%
+      {{hash=HA}{%
+         family={Horányi},
+         familyi={H\bibinitperiod},
+         given={András},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=MJ}{%
+         family={Muñoz‐Sabater},
+         familyi={M\bibinitperiod},
+         given={Joaquín},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=NJ}{%
+         family={Nicolas},
+         familyi={N\bibinitperiod},
+         given={Julien},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=RR}{%
+         family={Radu},
+         familyi={R\bibinitperiod},
+         given={Raluca},
+         giveni={R\bibinitperiod},
+      }}%
+      {{hash=SD}{%
+         family={Schepers},
+         familyi={S\bibinitperiod},
+         given={Dinand},
+         giveni={D\bibinitperiod},
+      }}%
+      {{hash=VS}{%
+         family={Villaume},
+         familyi={V\bibinitperiod},
+         given={Sebastien},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=HL}{%
+         family={Haimberger},
+         familyi={H\bibinitperiod},
+         given={Leopold},
+         giveni={L\bibinitperiod},
+      }}%
+      {{hash=WJ}{%
+         family={Woollen},
+         familyi={W\bibinitperiod},
+         given={Jack},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=BC}{%
+         family={Buontempo},
+         familyi={B\bibinitperiod},
+         given={Carlo},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=TJ}{%
+         family={Thépaut},
+         familyi={T\bibinitperiod},
+         given={Jean‐Noël},
+         giveni={J\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{SC+1}
+    \strng{fullhash}{SCHHSAPPBBBPHAMJNJRRSDVSHLWJBCTJ1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2024}
+    \field{labeldatesource}{}
+    \field{sortinit}{S}
+    \field{sortinithash}{S}
+    \field{abstract}{%
+    We provide a description and concise evaluation of the European Centre of Medium-range Weather Forecasts Reanalysis v.5 (ERA5) global reanalysis from an additional extension back to 1940 that was released in March 2023, including its timely updates to the end of 2022. The ERA5 product from 1979 to end 2020 and a preliminary back extension from 1950 to 1978 have already been described elsewhere. The new back extension that spans 1940 to 1978 represents the official release and supersedes the preliminary product. Currently, the ERA5 data record extends over more than 83 years of hourly global three-dimensional fields for many quantities that describe the global atmosphere, land surface, and ocean waves at a horizontal resolution of about 31 km. ERA5 relies on the ingestion of sub-daily in-situ and satellite observations, and the number of these increases from 17,000 per day in 1940 to 25 million per day by 2022. Accordingly, the quality of the reanalysis improves throughout the period. Over the Northern Hemisphere ERA5 generally provides a reliable representation of the synoptic situation from the early 1940s and provides long-term variability that is in line with other datasets. Over the Southern Hemisphere, however, for the early period the description of ERA5 seems mainly statistical. Furthermore, there is a small deviation in surface temperature compared with reconstructions based on monthly aggregations of observations over land before 1946. For this period, the absence of upper air temperature observations reveals a model cold bias in the lower stratosphere. For the period from 1950 to 1978, the final release described here improves on the suboptimal treatment of International Best Track Archive for Climate Stewardship observations in the preliminary release, with, as a result, a much more homogeneous representation of tropical cyclones over the entire ERA5 record. Longer spin-up periods also have a beneficial impact on soil moisture.%
+    }
+    \verb{doi}
+    \verb 10.1002/qj.4803
+    \endverb
+    \field{issn}{0035-9009, 1477-870X}
+    \field{number}{764}
+    \field{pages}{4014\bibrangedash 4048}
+    \field{title}{The {ERA5} global reanalysis from 1940 to 2022}
+    \verb{url}
+    \verb https://rmets.onlinelibrary.wiley.com/doi/10.1002/qj.4803
+    \endverb
+    \field{volume}{150}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/3RA7FV55/Soci et al. - 2024 - The ERA5
+    \verb  global reanalysis from 1940 to 2022.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Quarterly Journal of the Royal Meteorological Society}
+    \field{month}{10}
+    \field{year}{2024}
+    \field{urlday}{31}
+    \field{urlmonth}{03}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{thomasson_improving_2023}{thesis}{}
+    \name{author}{1}{}{%
+      {{hash=TA}{%
+         family={Thomasson},
+         familyi={T\bibinitperiod},
+         given={August},
+         giveni={A\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{TA1}
+    \strng{fullhash}{TA1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2023}
+    \field{labeldatesource}{}
+    \field{sortinit}{T}
+    \field{sortinithash}{T}
+    \field{abstract}{%
+    Accurate fog prediction is an important task facing forecast centers since low visibility can affect anthropogenic systems, such as aviation. Therefore, this study investigates the use of Machine Learning classiﬁcation algorithms for post-processing the output of the Danish Meteorological Institute’s operational Numerical Weather Prediction (NWP) model to improve visibility prediction. Two decision tree ensemble methods, XGBoost and Random Forest, were trained on more than 4 years of archived forecast data and visibility observations from 28 locations in Denmark. Observations were classiﬁed into eight classes, while models were optimized with resampling and Bayesian optimization. On an independent 15-month period, the Machine Learning methods show an improvement in balanced accuracy, F1-score, and Extremal Dependency Index compared to the NWP and persistence models. XGBoost performs slightly better. However, both methods suffer from an increase in overprediction of the low visibility classes. The models are also discussed regarding usability, coping with model changes and preservation of spatial features. Finally, the study shows how the interpretation of the post-processing models may be included operationally. Future research recommendations include incorporating more variables, using alternative class imbalance methods and further analyzing the models’ implementation and usage. Overall, the study demonstrates the potential of these models to improve visibility point forecasts in an operational setting.%
+    }
+    \field{title}{Improving {Visibility} {Forecasts} in {Denmark} {Using} {Machine} {Learning} {Post}-processing}
+    \list{location}{1}{%
+      {Uppsala, Sweden}%
+    }
+    \list{institution}{1}{%
+      {Uppsala University}%
+    }
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/343BY7KH/Thomasson - Improving Visibil
+    \verb ity Forecasts in Denmark Using Machine Learning Post-processing.pdf:a
+    \verb pplication/pdf
+    \endverb
+    \field{type}{phdthesis}
+    \field{year}{2023}
+  \endentry
+
+  \entry{wu_dynamic-lstm_2022}{article}{}
+    \name{author}{4}{}{%
+      {{hash=WZ}{%
+         family={Wu},
+         familyi={W\bibinitperiod},
+         given={Zhiyong},
+         giveni={Z\bibinitperiod},
+      }}%
+      {{hash=YH}{%
+         family={Yin},
+         familyi={Y\bibinitperiod},
+         given={Hao},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=HH}{%
+         family={He},
+         familyi={H\bibinitperiod},
+         given={Hai},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=LY}{%
+         family={Li},
+         familyi={L\bibinitperiod},
+         given={Yuan},
+         giveni={Y\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{WZ+1}
+    \strng{fullhash}{WZYHHHLY1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2022}
+    \field{labeldatesource}{}
+    \field{sortinit}{W}
+    \field{sortinithash}{W}
+    \field{abstract}{%
+    Accurate drought prediction is essential for drought resilience and water resources management. The skill of seasonal drought prediction from dynamical and statistical models has limitations. This study combines dynamical models and deep learning to construct hybrid (dynamical-statistical) models. We use the random forest to extract typical grids based on the geopotential height, sea-level pressure, and 2-m temperature. The long short-term memory (LSTM) is used to construct the statistical models, with atmospheric variables as predictors and the 3-month Standardized Precipitation Index (SPI3) as the predictand. The hindcasts of atmospheric variables from the European Centre for Medium-Range Weather Forecasts (ECMWF) SEAS5 model are processed as predictors to force the statistical models. The hybrid model, constructed using the dynamical models and the LSTM, is named dynamic-LSTM (“D-LSTM”). The results suggest that the LSTM models are of informationextraction capability and robustness. When the lead time exceeds one month, the prediction skills are significantly improved by the D-LSTM models, especially in the East, Northwest, Southwest, and Tibet. In most regions, the D-LSTM models are more skillful across all seasons for lead times exceeding 30 days and are reliable in predicting droughts in spring and summer when the ECMWF SEAS5 loses skills at the seasonal scale. Furthermore, the D-LSTM models are more accurate in drought onset prediction.%
+    }
+    \verb{doi}
+    \verb 10.1016/j.jhydrol.2022.128706
+    \endverb
+    \field{issn}{00221694}
+    \field{pages}{128706}
+    \field{title}{Dynamic-{LSTM} hybrid models to improve seasonal drought predictions over {China}}
+    \verb{url}
+    \verb https://linkinghub.elsevier.com/retrieve/pii/S0022169422012768
+    \endverb
+    \field{volume}{615}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/4Q6IYJDD/Wu et al. - 2022 - Dynamic-LS
+    \verb TM hybrid models to improve seasonal drought predictions over China.p
+    \verb df:application/pdf
+    \endverb
+    \field{journaltitle}{Journal of Hydrology}
+    \field{month}{12}
+    \field{year}{2022}
+    \field{urlday}{30}
+    \field{urlmonth}{12}
+    \field{urlyear}{2025}
+  \endentry
+\enddatalist
+\endinput

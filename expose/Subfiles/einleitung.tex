@@ -1,0 +1,37 @@
+% !TeX root = ../ba-expose-lentz.tex
+
+\documentclass[ba-expose-lentz.tex]{subfile}
+
+\begin{document}
+
+{\let\clearpage\relax \chapter{Einleitung: Dürrevorhersagen in Afrika - Die Lücke zwischen Beobachtungsdaten und saisonalen Vorhersagen}}\label{einleitung}
+
+\noindent Dürre gehört zu den meteorologischen Extremereignissen, welche den größten Einfluss auf landwirtschaftliche, soziale und ökonomische Verhältnisse hat.
+Dürreextreme ereignen sich in fast allen Klimazonen und in einer weiten Spanne an Dauer, Intensität und regionaler Ausdehnung. \\
+Unterschieden werden kann dabei zwischen meteorologischen, landwirtschaftlichen und sozioökonomischen Dürren.
+Landwirtschaftliche und sozioökonomischen Dürredefinitionen berechnen die Auswirkungen meteorologischer Dürreereignisse auf landwirtschaftliche und sozioökonomische Modelle.
+Meteorologische Dürreereignisse mit signifikantem Skill vorherzusagen, ist dabei nicht einfach.
+Sie sind hauptsächlich abhängig von Niederschlagsdefiziten und erhöhter Evapotranspiration aufgrund von erhöhten Temperaturen \parencite{hao_seasonal_2018}.
+Aus diesem Grund erfolgen Vorhersagen meteorologischer Dürreereignisse meistens mithilfe von dynamischen Klimamodellen (General Circulation Models - GCM).
+Diese sagen dann die entsprechenden klimatischen Variablen vorher, beispielsweise Niederschlag und Temperatur, aus welchen anschließend Evapotranspiration und schließlich standartisierte Dürreindizes berechnet werden können.
+Allerdings besitzen alle Klimamodelle signifikante Biase und Unsicherheiten, welche zu verschobenen oder fehlerhaften Dürrevorhersagen führen können \parencite{wu_dynamic-lstm_2022}.
+Speziell nach dem Abklingen von Initialisierungseffekten können dynamische Klimamodelle auf saisonalen Zeitskalen signifikante Unsicherheiten und fehlerhafte Dynamiken darstellen aufgrund unterliegender Modellbiase \parencite{wu_dynamic-lstm_2022}.
+Eine alternative Methode zur Vorhersage von Dürreereignissen sind statistischer Modelle.
+Mithilfe der statistischen Analyse historischer Daten können zukünftige Dürreereignisse vorhergesagt werden.
+Statistische Methoden, wie künstliche Intelligenz (KI), Regressions- oder konditionelle Wahrscheinlichkeitsmodelle, haben allerdings auch klare Schwachpunkte.
+Speziell in Bezug instabilen und nichtlinearen statistischen Beziehungen sind statistische Vorhersagemodelle limitiert.
+Zusätzlich führen undurchsichtige Architekturen besonders bei KI-Modellen häufig zu unklaren und inkonsistenten dynamischen Beziehungen \parencite{hao_seasonal_2018}.
+Da beide Ansätze unterschiedliche Schwächen und Stärken besitzen, werden bei klimatischen Vorhersagen auf saisonalen bis dekadischen Zeitskalen immer häufiger hybride Ansätze verwendet, welche dynamische Modelle mit statistischen Vorhersagen kombinieren \parencite{li_post-processing_2021,wu_dynamic-lstm_2022}.
+Gerade bei saisonalen Vorhersagen von Extremereignissen ist die Implementierung von hybriden KI-GCM-Modellen jedoch noch nicht weit vorangeschritten.
+Eine weitere Lücke in aktueller Forschungsliteratur bezüglich saisonaler Dürrevorhersagen besteht in der Diskrepanz zwischen der Entwicklung dynamischer Modelle und beobachtungszentrierter Forschung zu aktuellen und historischen Entwicklungen von Dürreextremen.
+Dabei ist nicht nur die Kalibrierung von Klimamodellen auf die akkurate Vorhersage von Extremereignissen ein Problem, sondern auch die unterschiedlichen räumlichen Auflösungen.
+Aufgrund ihres extrem hohen Rechenaufwands können dynamische GCMs nicht mit der hohen Auflösung von Beobachtungsdachten durch Remote Sensing mithalten.\\
+In dieser Arbeit soll aus diesen Gründen mit einem hybriden Ansatz zwischen maschinellem Lernen (ML) und dynamischen Klimamodellen versucht werden die saisonale Vorhersage von regionalen Dürreereignissen zu verbessern.
+Dabei sollen durch das Postprocessen saisonaler dynamischer Vorhersagen mit ML einerseits Biases dynamischer Modelle verbessert werden.
+Zusätzlich soll durch das Trainieren der ML auf aktuellen und hochaufgelösten Remote Sensing Beobachtungsdaten die Lücke zwischen Beobachtungen und dynamischer Vorhersagen geschlossen werden.
+Idealerweise soll dadurch die operationelle, dynamische Vorhersage des deutschen Wetterdiensts (DWD) mithilfe einer variablen und statistischen Biaskorrektur verbessert und auf die Vorhersage von Dürreextremen kalibriert werden, sowie auf die Auflösung der Beobachtungsdaten angehoben werden.
+
+
+
+
+\end{document}

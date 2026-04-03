@@ -1,0 +1,52 @@
+% !TeX root = ../ba-expose-lentz.tex
+
+\documentclass[ba-expose-lentz.tex]{subfile}
+
+\begin{document}
+
+{\let\clearpage\relax \chapter{Methoden und Daten: Postprocessen dynamischer Vorhersagen durch Maschinelles Lernen auf Basis von Remote Sensing Daten}}\label{methoden}
+
+\section{Methode}
+
+In einem hybriden Ansatz sollen in dieser Arbeit die Vorhersagedaten eines dynamischen Klimamodells des DWD mithilfe von KI nachbearbeitet werden.
+Dafür muss zunächst analysiert werden, in welchen Regionen das dynamische Modell Dürreereignisse mit viel oder wenig Skill vorhersagt.
+Zur Bewertung des Vorhersageskills sollen einfach statistische Metriken, wie der Root Mean Squared Error (RMSE) oder Pearsons R Korrelation verwendet werden.
+Anschließend soll ein Partial Convolutional Neural Network (PCNN) die dynamischen Vorhersagen in den Regionen nachbearbeitet werden, in welchen diese als wenig skillvoll gelabelt wurden.
+Dieses PCNN soll die realistischen Muster von regionalen Dürreextremen auf dem afrikanischen Kontinent mithilfe von hochaufgelösten Remote Sensing Daten lernen.
+PCNNs stammen ursprünglich aus dem Einfüllen von Fotografien \parencite{liu_image_2018}.
+Aufgrund ihrer Fähigkeit räumliche Strukturen zu lernen und auf das Ausfüllen von Lücken anzuwenden, wurden sie allerdings schon häufiger für die Rekonstruktion von Klimadaten verwendet \parencite{kadow_artificial_2020, lentz_improving_2025}.
+Dabei werden mithilfe einer binären Maske und einem Input-Bild schrittweise fehlende Werte (Pixel, an denen die Maske 0 anzeigt) mit Werten, die den Traininsdaten an dieser Stelle entsprechen, eingefüllt.
+Im Kontext dieser Arbeit soll das PCNN die Dürrevorhersagen in den Regionen, in denen sie als schlecht bewertet wurden, mit den aus den Remote Sensing Daten gelernten Strukturen ausfüllen. \\
+Als Predictor für Dürreereignisse soll dabei die klimatische Wasserbilanz
+
+\begin{align}
+    KWB = P - PET
+\end{align}
+
+genommen werden. $P$ bezeichnet dabei den totalen Niederschlag pro Quadratmeter, während $PET$ die potentielle Evapotranspiration bezeichnet.
+Die $PET$ muss dabei zunächst berechnet werden.
+Mit Penman-Monteith nutzt die state-of-the-art Methode zur Berechnung der $PET$ allerdings viele Input-Größen, welche entweder nicht vorhergesagt werden oder keine Predictability auf saisonalen Zeitskalen besitzen.
+Aus diesem Grund soll eine einfachere, nur auf der Temperatur basierte Berechnungsmethode der $PET$ in dieser Arbeit verwendet werden.
+Die KWB bildet damit die Grundlage des SPEI Dürreindizes (Standardised Precipitation Evaporation Index).
+Da die Nachberarbeitung einer standartisierter Größe allerdings keinen Sinn ergibt, da sie die Standartisierung hinfällig machen würde, wird die unstandartisierte KWB als Zielgröße genutzt werden.
+Anschließen kann nach dem Postprocessing Schritt durch das PCNN eine Standartisierung vorgenommen werden, um eine globale Vergleichsgröße zu berechnen. \\
+Ausgewertet sollen die Effekte der Nachberarbeitung dann wieder mithilfe von RMSE und Korrelationkoeffizienten, aber auch durch den Vergleich der KWB Distributionen, um ein spezielles Augenmerk auf die wirkungsvollen Ereignisse in den Extremteilen der Distribution zu legen. \\
+Zusätzlich zu der reinen Nachbearbeitung der dynamischen Vorhersagen soll auch versucht werden noch einen Downscaling Mechanismus in das PCNN einzubauen.
+Durch seine U-net förmige Struktur könnte durch einen weiteren Schritt im Decoder des PCNNs die Auflösung der Inputdaten theoretisch erhöht werden.
+Durch die Implementierung eines solchen Downscalingmechanismusses könnten die niedrig aufgelösten dynamischen Vorhersagen auf die höhere Auflösung der Remote Sensing Daten im Training angehoben werden.
+
+\section{Daten}
+
+Als Datengrundlage für das dynamische Modell sollen die operationellen saisonalen Klimavorhersagen des DWD genutzt werden \parencite{paxian_dwd_2023}.
+Diese sind frei verfügbar und können im Copernicus Data Store frei heruntergeladen werden \parencite{paxian_dwd_2023}.
+Als Grundlage für das Training soll die KWB, berechnet aus höher aufgelösten Remote Sensing Daten verwendet werden.
+Hierzu soll der totale Niederschlag des TAMSAT-Datensatzes der University of Reading genutzt werden \parencite{maidment_tamsat_2020}.
+Dieser ist auf dem afrikanischen Kontinentalgebiet kalibriert und bietet somit die ideale Grundlage für diese Arbeit.
+Diese sollen für die Berechnung der $PET$ mit den Temperaturdaten der 0.25x0.25 ERA5-Reanalyse kombiniert werden, um die $KWB$ zu berechnen \parencite{soci_era5_2024}.
+
+
+
+
+
+
+\end{document}

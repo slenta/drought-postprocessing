@@ -1,0 +1,24 @@
+% !TeX root = ../ba-expose-lentz.tex
+
+\documentclass[ba-expose-lentz.tex]{subfile}
+
+\begin{document}
+
+{\let\clearpage\relax \chapter{Geplante Vorgehensweise und Vorläufiger Zeitplan}}\label{zeitplan}
+
+Diese Arbeit besteht aus 2 möglichen Schritten.
+Zunächst sollen die Remote Sensing Daten, sowie die zu verbessernden dynamischen Vorhersagen für den Postprocessing Schritt vorbereitet werden.
+Dazu sollen die Niederschlags und Temperaturdaten auf eine gemeinsame Auflösung gebracht und aus ihnen die $PET$ und schließlich die $KWB$ errechnet werden.
+Anschließend sollen Masken erstellt werden, welche Regionen mit größerem und niedrigerem Vorhersageskill darstellen.
+Mithilfe der Masken und den vorbereiteten Inputdaten soll dann das PCNN trainiert und mit dem trainierten PCNN die saisonalen $KWB$ Vorhersagen des DWD nachbearbeitet werden.
+Zum Abschluss diesen ersten Teiles soll eine Evaluierung des Effekts, welchen die Nachbearbeitung auf die Vorhersage von Dürreereignissen hat, durchgeführt werden. \\
+Falls diese Analyse im geplanten Zeitrahmen abgeschlossen werden kann, soll anschließend ein Downscaling Mechanismus in das PCNN eingebaut werden.
+Anschließend soll die Analyse des ersten Teils wiederholt werden und mit einem anschließenden Downscaling Schritt, welcher die Vorhersagedaten auf die ursprüngliche Auflösung der Beobachtungsdaten hebt, supplementiert werden.
+Schließlich sollen die Ergebnisse noch einmal ausführlich evaluiert und in den Kontext anderer Biaskorrekturen oder hybrider Vorhersagemethoden gesetzt werden. \\
+Zeitlich soll die Vorbereitung der Daten in den ersten zwei Wochen nach Bearbeitungsstart abgeschlossen sein.
+Das Anschließende Training und Evaluieren des PCNNs sollte weitere 3-4 Wochen in Anspruch nehmen.
+Falls dies gelingt soll der zweite Teil der Analyse in weiteren 2-4 Wochen durchgeführt werden.
+Für das Zusammentragen und Niederschreiben der Ergebnisse werden zum Schluss weitere 2-4 Wochen eingeplant.
+
+
+\end{document}

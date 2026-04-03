@@ -1,0 +1,626 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated as
+% required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+\datalist[entry]{nyt/global//global/global}
+  \entry{hao_seasonal_2018}{article}{}
+    \name{author}{3}{}{%
+      {{hash=HZ}{%
+         family={Hao},
+         familyi={H\bibinitperiod},
+         given={Zengchao},
+         giveni={Z\bibinitperiod},
+      }}%
+      {{hash=SVP}{%
+         family={Singh},
+         familyi={S\bibinitperiod},
+         given={Vijay\bibnamedelima P.},
+         giveni={V\bibinitperiod\bibinitdelim P\bibinitperiod},
+      }}%
+      {{hash=XY}{%
+         family={Xia},
+         familyi={X\bibinitperiod},
+         given={Youlong},
+         giveni={Y\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{HZ+1}
+    \strng{fullhash}{HZSVPXY1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{shorttitle}
+    \field{labelyear}{2018}
+    \field{labeldatesource}{}
+    \field{sortinit}{H}
+    \field{sortinithash}{H}
+    \field{abstract}{%
+    Drought prediction is of critical importance to early warning for drought managements. This review provides a synthesis of drought prediction based on statistical, dynamical, and hybrid methods. Statistical drought prediction is achieved by modeling the relationship between drought indices of interest and a suite of potential predictors, including large-scale climate indices, local climate variables, and land initial conditions. Dynamical meteorological drought prediction relies on seasonal climate forecast from general circulation models (GCMs), which can be employed to drive hydrological models for agricultural and hydrological drought prediction with the predictability determined by both climate forcings and initial conditions. Challenges still exist in drought prediction at long lead time and under a changing environment resulting from natural and anthropogenic factors. Future research prospects to improve drought prediction include, but are not limited to, high-quality data assimilation, improved model development with key processes related to drought occurrence, optimal ensemble forecast to select or weight ensembles, and hybrid drought prediction to merge statistical and dynamical forecasts.%
+    }
+    \verb{doi}
+    \verb 10.1002/2016RG000549
+    \endverb
+    \field{issn}{8755-1209, 1944-9208}
+    \field{number}{1}
+    \field{pages}{108\bibrangedash 141}
+    \field{shorttitle}{Seasonal {Drought} {Prediction}}
+    \field{title}{Seasonal {Drought} {Prediction}: {Advances}, {Challenges}, and {Future} {Prospects}}
+    \verb{url}
+    \verb https://agupubs.onlinelibrary.wiley.com/doi/10.1002/2016RG000549
+    \endverb
+    \field{volume}{56}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/YG7JW8Q3/Hao et al. - 2018 - Seasonal
+    \verb Drought Prediction Advances, Challenges, and Future Prospects.pdf:app
+    \verb lication/pdf
+    \endverb
+    \field{journaltitle}{Reviews of Geophysics}
+    \field{month}{03}
+    \field{year}{2018}
+    \field{urlday}{30}
+    \field{urlmonth}{12}
+    \field{urlyear}{2025}
+  \endentry
+
+  \entry{kadow_artificial_2020}{article}{}
+    \name{author}{3}{}{%
+      {{hash=KC}{%
+         family={Kadow},
+         familyi={K\bibinitperiod},
+         given={Christopher},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=HDM}{%
+         family={Hall},
+         familyi={H\bibinitperiod},
+         given={David\bibnamedelima Matthew},
+         giveni={D\bibinitperiod\bibinitdelim M\bibinitperiod},
+      }}%
+      {{hash=UU}{%
+         family={Ulbrich},
+         familyi={U\bibinitperiod},
+         given={Uwe},
+         giveni={U\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{KC+1}
+    \strng{fullhash}{KCHDMUU1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2020}
+    \field{labeldatesource}{}
+    \field{sortinit}{K}
+    \field{sortinithash}{K}
+    \verb{doi}
+    \verb 10.1038/s41561-020-0582-5
+    \endverb
+    \field{issn}{1752-0894, 1752-0908}
+    \field{number}{6}
+    \field{pages}{408\bibrangedash 413}
+    \field{title}{Artificial intelligence reconstructs missing climate information}
+    \verb{url}
+    \verb https://www.nature.com/articles/s41561-020-0582-5
+    \endverb
+    \field{volume}{13}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/D7JXDVZQ/Kadow et al. - 2020 - Artific
+    \verb ial intelligence reconstructs missing climate information.pdf:applica
+    \verb tion/pdf
+    \endverb
+    \field{journaltitle}{Nature Geoscience}
+    \field{month}{06}
+    \field{year}{2020}
+    \field{urlday}{03}
+    \field{urlmonth}{01}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{lentz_improving_2025}{article}{}
+    \name{author}{4}{}{%
+      {{hash=LS}{%
+         family={Lentz},
+         familyi={L\bibinitperiod},
+         given={Simon},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=BS}{%
+         family={Brune},
+         familyi={B\bibinitperiod},
+         given={Sebastian},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=KC}{%
+         family={Kadow},
+         familyi={K\bibinitperiod},
+         given={Christopher},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=BJ}{%
+         family={Baehr},
+         familyi={B\bibinitperiod},
+         given={Johanna},
+         giveni={J\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{LS+1}
+    \strng{fullhash}{LSBSKCBJ1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2025}
+    \field{labeldatesource}{}
+    \field{sortinit}{L}
+    \field{sortinithash}{L}
+    \field{abstract}{%
+    Oceanic subsurface observations are sparse and lead to large uncertainties in any model-based estimate. We investigate the applicability of transfer learning based neural networks to reconstruct North Atlantic temperatures in times with sparse observations. Our network is trained on a time period with abundant observations to learn realistic physical behavior. Evaluating it within a consistent data assimilation framework, this network learns and reproduces its training data’s physical patterns. Additionally, the network is able to transfer these patterns towards a historical ocean heat content estimate in times with sparse observations. Consequently, with infrequent input data, machine learning reconstructions exhibit similar physical structures, while correcting for known errors compared to state-of-the-art data assimilation products. In this manner, transfer learning can impact the initialization and evaluation of climate hindcasts. Furthermore, by exhibiting the capability to accurately transfer results from high to low-frequencies, transfer learning based neural networks showcase their relevance in mixed-frequency measurements beyond climate science.%
+    }
+    \verb{doi}
+    \verb 10.1038/s41598-025-86374-4
+    \endverb
+    \field{issn}{2045-2322}
+    \field{number}{1}
+    \field{pages}{2640}
+    \field{title}{Improving ocean reanalyses of observationally sparse regions with transfer learning}
+    \verb{url}
+    \verb https://www.nature.com/articles/s41598-025-86374-4
+    \endverb
+    \field{volume}{15}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/NALEF2A6/Lentz et al. - 2025 - Improvi
+    \verb ng ocean reanalyses of observationally sparse regions with transfer l
+    \verb earning.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Scientific Reports}
+    \field{month}{01}
+    \field{year}{2025}
+    \field{urlday}{03}
+    \field{urlmonth}{01}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{li_post-processing_2021}{article}{}
+    \name{author}{6}{}{%
+      {{hash=LY}{%
+         family={Li},
+         familyi={L\bibinitperiod},
+         given={Yuan},
+         giveni={Y\bibinitperiod},
+      }}%
+      {{hash=WZ}{%
+         family={Wu},
+         familyi={W\bibinitperiod},
+         given={Zhiyong},
+         giveni={Z\bibinitperiod},
+      }}%
+      {{hash=HH}{%
+         family={He},
+         familyi={H\bibinitperiod},
+         given={Hai},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=WQJ}{%
+         family={Wang},
+         familyi={W\bibinitperiod},
+         given={Quan\bibnamedelima J.},
+         giveni={Q\bibinitperiod\bibinitdelim J\bibinitperiod},
+      }}%
+      {{hash=XH}{%
+         family={Xu},
+         familyi={X\bibinitperiod},
+         given={Huating},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=LG}{%
+         family={Lu},
+         familyi={L\bibinitperiod},
+         given={Guihua},
+         giveni={G\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{LY+1}
+    \strng{fullhash}{LYWZHHWQJXHLG1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2021}
+    \field{labeldatesource}{}
+    \field{sortinit}{L}
+    \field{sortinithash}{L}
+    \field{abstract}{%
+    Post-processing outputs from Coupled Global Circulation Models (CGCM) is required to generate skillful and reliable sub-seasonal precipitation forecasts. However, it is not currently known at what spatiotemporal scale can sub-seasonal precipitation forecasts be improved after post-processing. In this study, a Bayesian joint probability (BJP) method is used to post-process European Centre for Medium-Range Weather Forecasts (ECMWF) subseasonal precipitation forecasts at various spatiotemporal scales across China during the boreal summer monsoon. The relationships between forecasts and observations are built at daily, weekly, and fortnight temporal scales for each grid cell and each hydroclimatic region after normalization. The results suggest that the skills and reliability of ECMWF raw daily precipitation forecasts are improved after post-processing. The forecast skills are further improved at larger spatial scales or longer temporal scales, especially in the Upper and Middle Yangtze River, Southeast Rivers, and Pearl River. Although the forecast skills decrease rapidly as lead time increases, the uncertainty spread of the BJP calibrated sub-seasonal precipitation forecasts is highly reliable at all lead times and spatiotemporal scales. This work will help to realize the potential of CGCM forecasts at sub-seasonal time scales. Future works will investigate the benefits of post-processing precipitation forecasts for sub-seasonal streamflow predictions.%
+    }
+    \verb{doi}
+    \verb 10.1016/j.jhydrol.2020.125742
+    \endverb
+    \field{issn}{00221694}
+    \field{pages}{125742}
+    \field{title}{Post-processing sub-seasonal precipitation forecasts at various spatiotemporal scales across {China} during boreal summer monsoon}
+    \verb{url}
+    \verb https://linkinghub.elsevier.com/retrieve/pii/S0022169420312038
+    \endverb
+    \field{volume}{598}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/3M3A5HAJ/Li et al. - 2021 - Post-proce
+    \verb ssing sub-seasonal precipitation forecasts at various spatiotemporal
+    \verb scales across China d.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Journal of Hydrology}
+    \field{month}{07}
+    \field{year}{2021}
+    \field{urlday}{30}
+    \field{urlmonth}{12}
+    \field{urlyear}{2025}
+  \endentry
+
+  \entry{liu_image_2018}{misc}{}
+    \name{author}{6}{}{%
+      {{hash=LG}{%
+         family={Liu},
+         familyi={L\bibinitperiod},
+         given={Guilin},
+         giveni={G\bibinitperiod},
+      }}%
+      {{hash=RFA}{%
+         family={Reda},
+         familyi={R\bibinitperiod},
+         given={Fitsum\bibnamedelima A.},
+         giveni={F\bibinitperiod\bibinitdelim A\bibinitperiod},
+      }}%
+      {{hash=SKJ}{%
+         family={Shih},
+         familyi={S\bibinitperiod},
+         given={Kevin\bibnamedelima J.},
+         giveni={K\bibinitperiod\bibinitdelim J\bibinitperiod},
+      }}%
+      {{hash=WTC}{%
+         family={Wang},
+         familyi={W\bibinitperiod},
+         given={Ting-Chun},
+         giveni={T\bibinithyphendelim C\bibinitperiod},
+      }}%
+      {{hash=TA}{%
+         family={Tao},
+         familyi={T\bibinitperiod},
+         given={Andrew},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=CB}{%
+         family={Catanzaro},
+         familyi={C\bibinitperiod},
+         given={Bryan},
+         giveni={B\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \list{publisher}{1}{%
+      {arXiv}%
+    }
+    \keyw{Computer Science - Computer Vision and Pattern Recognition}
+    \strng{namehash}{LG+1}
+    \strng{fullhash}{LGRFASKJWTCTACB1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2018}
+    \field{labeldatesource}{}
+    \field{sortinit}{L}
+    \field{sortinithash}{L}
+    \field{abstract}{%
+    Existing deep learning based image inpainting methods use a standard convolutional network over the corrupted image, using convolutional ﬁlter responses conditioned on both valid pixels as well as the substitute values in the masked holes (typically the mean value). This often leads to artifacts such as color discrepancy and blurriness. Postprocessing is usually used to reduce such artifacts, but are expensive and may fail. We propose the use of partial convolutions, where the convolution is masked and renormalized to be conditioned on only valid pixels. We further include a mechanism to automatically generate an updated mask for the next layer as part of the forward pass. Our model outperforms other methods for irregular masks. We show qualitative and quantitative comparisons with other methods to validate our approach.%
+    }
+    \verb{doi}
+    \verb 10.48550/arXiv.1804.07723
+    \endverb
+    \field{note}{arXiv:1804.07723 [cs]}
+    \field{title}{Image {Inpainting} for {Irregular} {Holes} {Using} {Partial} {Convolutions}}
+    \verb{url}
+    \verb http://arxiv.org/abs/1804.07723
+    \endverb
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/8I3MMMRZ/Liu et al. - 2018 - Image Inp
+    \verb ainting for Irregular Holes Using Partial Convolutions.pdf:applicatio
+    \verb n/pdf
+    \endverb
+    \field{annotation}{%
+    Comment: Update: camera-ready; L1 loss is size-averaged; code of partial conv layer: https://github.com/NVIDIA/partialconv. Published at ECCV 2018%
+    }
+    \field{month}{12}
+    \field{year}{2018}
+    \field{urlday}{03}
+    \field{urlmonth}{01}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{maidment_tamsat_2020}{incollection}{}
+    \name{author}{4}{}{%
+      {{hash=MR}{%
+         family={Maidment},
+         familyi={M\bibinitperiod},
+         given={Ross},
+         giveni={R\bibinitperiod},
+      }}%
+      {{hash=BE}{%
+         family={Black},
+         familyi={B\bibinitperiod},
+         given={Emily},
+         giveni={E\bibinitperiod},
+      }}%
+      {{hash=GH}{%
+         family={Greatrex},
+         familyi={G\bibinitperiod},
+         given={Helen},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=YM}{%
+         family={Young},
+         familyi={Y\bibinitperiod},
+         given={Matthew},
+         giveni={M\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {Springer}%
+    }
+    \strng{namehash}{MR+1}
+    \strng{fullhash}{MRBEGHYM1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2020}
+    \field{labeldatesource}{}
+    \field{sortinit}{M}
+    \field{sortinithash}{M}
+    \field{booktitle}{Satellite {Precipitation} {Measurement}: {Volume} 1}
+    \field{pages}{393\bibrangedash 408}
+    \field{title}{Tamsat}
+    \field{year}{2020}
+  \endentry
+
+  \entry{paxian_dwd_2023}{article}{}
+    \name{author}{10}{}{%
+      {{hash=PA}{%
+         family={Paxian},
+         familyi={P\bibinitperiod},
+         given={A},
+         giveni={A},
+      }}%
+      {{hash=MB}{%
+         family={Mannig},
+         familyi={M\bibinitperiod},
+         given={B},
+         giveni={B},
+      }}%
+      {{hash=TM}{%
+         family={Tivig},
+         familyi={T\bibinitperiod},
+         given={M},
+         giveni={M},
+      }}%
+      {{hash=RK}{%
+         family={Reinhardt},
+         familyi={R\bibinitperiod},
+         given={K},
+         giveni={K},
+      }}%
+      {{hash=IK}{%
+         family={Isensee},
+         familyi={I\bibinitperiod},
+         given={K},
+         giveni={K},
+      }}%
+      {{hash=PA}{%
+         family={Pasternack},
+         familyi={P\bibinitperiod},
+         given={Alexander},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=HA}{%
+         family={Hoff},
+         familyi={H\bibinitperiod},
+         given={A},
+         giveni={A},
+      }}%
+      {{hash=PK}{%
+         family={Pankatz},
+         familyi={P\bibinitperiod},
+         given={K},
+         giveni={K},
+      }}%
+      {{hash=BS}{%
+         family={Buchholz},
+         familyi={B\bibinitperiod},
+         given={S},
+         giveni={S},
+      }}%
+      {{hash=WS}{%
+         family={Wehring},
+         familyi={W\bibinitperiod},
+         given={S},
+         giveni={S},
+      }}%
+    }
+    \strng{namehash}{PA+1}
+    \strng{fullhash}{PAMBTMRKIKPAHAPKBSWS1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2023}
+    \field{labeldatesource}{}
+    \field{sortinit}{P}
+    \field{sortinithash}{P}
+    \field{title}{The {DWD} climate predictions website: {Towards} a seamless outlook based on subseasonal, seasonal and decadal predictions}
+    \field{volume}{30}
+    \field{journaltitle}{Climate Services}
+    \field{year}{2023}
+  \endentry
+
+  \entry{soci_era5_2024}{article}{}
+    \name{author}{11}{}{%
+      {{hash=SC}{%
+         family={Soci},
+         familyi={S\bibinitperiod},
+         given={Cornel},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=HH}{%
+         family={Hersbach},
+         familyi={H\bibinitperiod},
+         given={Hans},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=SA}{%
+         family={Simmons},
+         familyi={S\bibinitperiod},
+         given={Adrian},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=PP}{%
+         family={Poli},
+         familyi={P\bibinitperiod},
+         given={Paul},
+         giveni={P\bibinitperiod},
+      }}%
+      {{hash=BB}{%
+         family={Bell},
+         familyi={B\bibinitperiod},
+         given={Bill},
+         giveni={B\bibinitperiod},
+      }}%
+      {{hash=BP}{%
+         family={Berrisford},
+         familyi={B\bibinitperiod},
+         given={Paul},
+         giveni={P\bibinitperiod},
+      }}%
+      {{hash=HA}{%
+         family={Horányi},
+         familyi={H\bibinitperiod},
+         given={András},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=MSJ}{%
+         family={Muñoz-Sabater},
+         familyi={M\bibinithyphendelim S\bibinitperiod},
+         given={Joaquín},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=NJ}{%
+         family={Nicolas},
+         familyi={N\bibinitperiod},
+         given={Julien},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=RR}{%
+         family={Radu},
+         familyi={R\bibinitperiod},
+         given={Raluca},
+         giveni={R\bibinitperiod},
+      }}%
+      {{hash=o}{%
+         family={{others}},
+         familyi={o\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{SC+1}
+    \strng{fullhash}{SCHHSAPPBBBPHAMSJNJRRo1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2024}
+    \field{labeldatesource}{}
+    \field{sortinit}{S}
+    \field{sortinithash}{S}
+    \field{note}{Publisher: Wiley Online Library}
+    \field{number}{764}
+    \field{pages}{4014\bibrangedash 4048}
+    \field{title}{The {ERA5} global reanalysis from 1940 to 2022}
+    \field{volume}{150}
+    \field{journaltitle}{Quarterly Journal of the Royal Meteorological Society}
+    \field{year}{2024}
+  \endentry
+
+  \entry{wu_dynamic-lstm_2022}{article}{}
+    \name{author}{4}{}{%
+      {{hash=WZ}{%
+         family={Wu},
+         familyi={W\bibinitperiod},
+         given={Zhiyong},
+         giveni={Z\bibinitperiod},
+      }}%
+      {{hash=YH}{%
+         family={Yin},
+         familyi={Y\bibinitperiod},
+         given={Hao},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=HH}{%
+         family={He},
+         familyi={H\bibinitperiod},
+         given={Hai},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=LY}{%
+         family={Li},
+         familyi={L\bibinitperiod},
+         given={Yuan},
+         giveni={Y\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{WZ+1}
+    \strng{fullhash}{WZYHHHLY1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2022}
+    \field{labeldatesource}{}
+    \field{sortinit}{W}
+    \field{sortinithash}{W}
+    \field{abstract}{%
+    Accurate drought prediction is essential for drought resilience and water resources management. The skill of seasonal drought prediction from dynamical and statistical models has limitations. This study combines dynamical models and deep learning to construct hybrid (dynamical-statistical) models. We use the random forest to extract typical grids based on the geopotential height, sea-level pressure, and 2-m temperature. The long short-term memory (LSTM) is used to construct the statistical models, with atmospheric variables as predictors and the 3-month Standardized Precipitation Index (SPI3) as the predictand. The hindcasts of atmospheric variables from the European Centre for Medium-Range Weather Forecasts (ECMWF) SEAS5 model are processed as predictors to force the statistical models. The hybrid model, constructed using the dynamical models and the LSTM, is named dynamic-LSTM (“D-LSTM”). The results suggest that the LSTM models are of informationextraction capability and robustness. When the lead time exceeds one month, the prediction skills are significantly improved by the D-LSTM models, especially in the East, Northwest, Southwest, and Tibet. In most regions, the D-LSTM models are more skillful across all seasons for lead times exceeding 30 days and are reliable in predicting droughts in spring and summer when the ECMWF SEAS5 loses skills at the seasonal scale. Furthermore, the D-LSTM models are more accurate in drought onset prediction.%
+    }
+    \verb{doi}
+    \verb 10.1016/j.jhydrol.2022.128706
+    \endverb
+    \field{issn}{00221694}
+    \field{pages}{128706}
+    \field{title}{Dynamic-{LSTM} hybrid models to improve seasonal drought predictions over {China}}
+    \verb{url}
+    \verb https://linkinghub.elsevier.com/retrieve/pii/S0022169422012768
+    \endverb
+    \field{volume}{615}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/4Q6IYJDD/Wu et al. - 2022 - Dynamic-LS
+    \verb TM hybrid models to improve seasonal drought predictions over China.p
+    \verb df:application/pdf
+    \endverb
+    \field{journaltitle}{Journal of Hydrology}
+    \field{month}{12}
+    \field{year}{2022}
+    \field{urlday}{30}
+    \field{urlmonth}{12}
+    \field{urlyear}{2025}
+  \endentry
+\enddatalist
+\endinput
