@@ -5,7 +5,6 @@ from pathlib import Path
 from droughtpp.analysis.qm_rf.utils.visualization import (
     plot_drought_hit_rate_maps,
     plot_extreme_drought_hit_histogram,
-    plot_residual_comparison_maps,
 )
 from droughtpp.analysis.qm_rf.utils.evaluation import (
     compute_gridcell_drought_hit_rate_percent,
@@ -18,98 +17,66 @@ from droughtpp.analysis.qm_rf.utils.evaluation import (
 )
 
 
-def evaluate_cwb(
-    corrected_cwb_json: Path,
+def evaluate_intensity(
+    corrected_intensity_json: Path,
     hindcasts_json: Path,
     reference_data: Path,
     out_dir: Path,
-    cwb_var: str = "CWB",
+    intensity_var: str = "CWB_INTENSITY",
     eval_years=None,
     std_multiplier: float = 1.0,
     plot_dir: Path | str | None = None,
     qm_hindcasts_json: Path | None = None,
-    qm_residuals_json: Path | None = None,
-    ml_residuals_json: Path | None = None,
     land_mask_path: Path | None = None,
 ):
 
     if eval_years is None:
         eval_years = []
 
-    corrected_cwb_paths = load_paths_from_json(corrected_cwb_json)
+    corrected_intensity_paths = load_paths_from_json(corrected_intensity_json)
     hindcast_paths = load_paths_from_json(hindcasts_json)
     qm_hindcast_paths = (
         load_paths_from_json(qm_hindcasts_json) if qm_hindcasts_json else None
     )
-    qm_residual_paths = (
-        load_paths_from_json(qm_residuals_json) if qm_residuals_json else None
-    )
-    ml_residual_paths = (
-        load_paths_from_json(ml_residuals_json) if ml_residuals_json else None
-    )
 
-    sample_corrected_cwb = load_eval_data(corrected_cwb_paths[0], cwb_var)
-    eval_month = int(sample_corrected_cwb["time"].dt.month.values[0])
-
-    reference_cwb_all = load_eval_data(Path(reference_data), cwb_var)
-    reference_cwb_all = reference_cwb_all.isel(
-        time=reference_cwb_all["time"].dt.month == eval_month
-    )
-    reference_cwb = select_eval_years(reference_cwb_all, eval_years)
+    reference_intensity_all = load_eval_data(Path(reference_data), intensity_var)
+    reference_intensity = select_eval_years(reference_intensity_all, eval_years)
 
     corrected_members = []
     baseline_members = []
     qm_members = []
-    qm_residual_members = []
-    ml_residual_members = []
     reference_members = []
 
-    for i, (hindcast_path, corrected_cwb_path) in enumerate(
-        zip(hindcast_paths, corrected_cwb_paths)
+    for i, (hindcast_path, corrected_intensity_path) in enumerate(
+        zip(hindcast_paths, corrected_intensity_paths)
     ):
-        baseline_cwb = load_eval_data(hindcast_path, cwb_var)
-        corrected_cwb = load_eval_data(corrected_cwb_path, cwb_var)
+        baseline_intensity = load_eval_data(hindcast_path, intensity_var)
+        corrected_intensity = load_eval_data(corrected_intensity_path, intensity_var)
 
-        baseline_cwb = select_eval_years(baseline_cwb, eval_years)
-        corrected_cwb = select_eval_years(corrected_cwb, eval_years)
+        baseline_intensity = select_eval_years(baseline_intensity, eval_years)
+        corrected_intensity = select_eval_years(corrected_intensity, eval_years)
 
-        corrected_cwb, baseline_cwb, reference_member = xr.align(
-            corrected_cwb,
-            baseline_cwb,
-            reference_cwb,
+        corrected_intensity, baseline_intensity, reference_member = xr.align(
+            corrected_intensity,
+            baseline_intensity,
+            reference_intensity,
             join="inner",
         )
 
-        corrected_members.append(corrected_cwb)
-        baseline_members.append(baseline_cwb)
+        corrected_members.append(corrected_intensity)
+        baseline_members.append(baseline_intensity)
         reference_members.append(reference_member)
 
-        # Load QM hindcasts if provided
         if qm_hindcast_paths:
-            qm_cwb = load_eval_data(qm_hindcast_paths[i], cwb_var)
-            qm_cwb = select_eval_years(qm_cwb, eval_years)
-            qm_cwb, _, _ = xr.align(
-                qm_cwb,
-                baseline_cwb,
+            qm_intensity = load_eval_data(qm_hindcast_paths[i], intensity_var)
+            qm_intensity = select_eval_years(qm_intensity, eval_years)
+            qm_intensity, _, _ = xr.align(
+                qm_intensity,
+                baseline_intensity,
                 reference_member,
                 join="inner",
             )
-            qm_members.append(qm_cwb)
-
-        if qm_residual_paths is not None and ml_residual_paths is not None:
-            qm_residual = load_eval_data(qm_residual_paths[i], cwb_var)
-            ml_residual = load_eval_data(ml_residual_paths[i], cwb_var)
-            qm_residual = select_eval_years(qm_residual, eval_years)
-            ml_residual = select_eval_years(ml_residual, eval_years)
-            qm_residual, ml_residual, _, _ = xr.align(
-                qm_residual,
-                ml_residual,
-                baseline_cwb,
-                reference_member,
-                join="inner",
-            )
-            qm_residual_members.append(qm_residual)
-            ml_residual_members.append(ml_residual)
+            qm_members.append(qm_intensity)
 
     skill = prepare_pairwise_skill_evaluation(
         corrected_members,
@@ -134,28 +101,18 @@ def evaluate_cwb(
     qm_ensemble = skill.get("qm_ensemble")
     qm_np = skill.get("qm_np")
 
-    qm_residual_np = None
-    ml_residual_np = None
-    if qm_residual_members and ml_residual_members:
-        qm_residual_ensemble = xr.concat(qm_residual_members, dim="member").transpose(
-            "time", "member", "latitude", "longitude"
-        )
-        ml_residual_ensemble = xr.concat(ml_residual_members, dim="member").transpose(
-            "time", "member", "latitude", "longitude"
-        )
-        qm_residual_np = qm_residual_ensemble.sel(time=common_time).values
-        ml_residual_np = ml_residual_ensemble.sel(time=common_time).values
-
     if plot_dir is not None:
         plot_dir = Path(plot_dir)
         plot_pairwise_skill_evaluation(
             plot_dir=plot_dir,
             skill=skill,
-            reference_all=reference_cwb_all.values,
-            variable_name=cwb_var,
+            reference_all=reference_intensity_all.sel(time=common_time)
+            .transpose("time", "latitude", "longitude")
+            .values,
+            variable_name=intensity_var,
             include_timeseries=True,
             include_example_time_means=True,
-            include_difference_examples=False,
+            include_difference_examples=True,
             land_mask_path=land_mask_path,
         )
 
@@ -224,13 +181,3 @@ def evaluate_cwb(
             lower_percentile=10.0,
             file_prefix="extreme_drought_p10_histogram",
         )
-
-        if qm_residual_np is not None and ml_residual_np is not None:
-            plot_residual_comparison_maps(
-                qm_residual_np,
-                ml_residual_np,
-                out_dir=str(plot_dir),
-                variable_name=cwb_var,
-                file_prefix="residual_qm_vs_ml",
-                land_mask_path=land_mask_path,
-            )

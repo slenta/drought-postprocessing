@@ -9,54 +9,16 @@ from droughtpp.evaluation.evaluation import (
     mae_per_member_grid,
     rmse_per_member_grid,
 )
-from droughtpp.analysis.qm_rf.utils.visualization import (
-    plot_mae_skill_metrics,
-    plot_bss_skill_metrics,
-)
 from droughtpp.analysis.qm_rf.utils.evaluation import (
+    _load_var,
+    _to_time_lat_lon,
+    _to_time_member_lat_lon,
     load_paths_from_json,
     load_eval_data,
     select_eval_years,
-    intersect_time_coordinates,
+    prepare_pairwise_skill_evaluation,
+    plot_pairwise_skill_evaluation,
 )
-
-
-def _infer_lat_lon_names(da):
-    lat_name = "latitude" if "latitude" in da.dims else "lat"
-    lon_name = "longitude" if "longitude" in da.dims else "lon"
-
-    if lat_name not in da.dims or lon_name not in da.dims:
-        raise ValueError(f"Could not infer latitude/longitude dims from {da.dims}")
-
-    return lat_name, lon_name
-
-
-def _load_var(path, var_name):
-    with xr.open_dataset(path, decode_times=False) as ds:
-        if var_name not in ds:
-            raise KeyError(f"{var_name} not found in {path}")
-        return ds[var_name].load()
-
-
-def _to_time_member_lat_lon(da, member_dim):
-    lat_name, lon_name = _infer_lat_lon_names(da)
-
-    if "time" not in da.dims:
-        raise ValueError("Expected a time dimension in SPEI data.")
-
-    if member_dim not in da.dims:
-        da = da.expand_dims({member_dim: [0]})
-
-    return da.transpose("time", member_dim, lat_name, lon_name)
-
-
-def _to_time_lat_lon(da):
-    lat_name, lon_name = _infer_lat_lon_names(da)
-
-    if "time" not in da.dims:
-        raise ValueError("Expected a time dimension in reference SPEI data.")
-
-    return da.transpose("time", lat_name, lon_name)
 
 
 def evaluate_spei(
@@ -68,6 +30,7 @@ def evaluate_spei(
     eval_years=None,
     std_multiplier: float = 1.0,
     plot_dir: Path | None = None,
+    land_mask_path: Path | None = None,
 ):
     if eval_years is None:
         eval_years = []
@@ -76,14 +39,6 @@ def evaluate_spei(
 
     baseline_spei_paths = load_paths_from_json(hindcasts_spei_json)
     reference_spei_paths = load_paths_from_json(reference_spei_json)
-
-    if len(reference_spei_paths) == 0:
-        raise ValueError("reference_spei_json does not contain any SPEI path.")
-
-    if len(baseline_spei_paths) != len(corrected_spei_paths):
-        raise ValueError(
-            "Mismatch between number of baseline SPEI files and corrected SPEI files."
-        )
 
     reference_spei = load_eval_data(reference_spei_paths[0], spei_var)
     reference_spei = select_eval_years(reference_spei, eval_years)
@@ -112,31 +67,29 @@ def evaluate_spei(
         baseline_members.append(baseline_spei)
         reference_members.append(reference_member)
 
-    common_time = intersect_time_coordinates(
-        corrected_members + baseline_members + reference_members
+    skill = prepare_pairwise_skill_evaluation(
+        corrected_members,
+        baseline_members,
+        reference_members,
+        eval_years=eval_years,
+        primary_label="RF-corrected",
+        secondary_label="Original",
     )
 
-    corrected_members = [member.sel(time=common_time) for member in corrected_members]
-    baseline_members = [member.sel(time=common_time) for member in baseline_members]
-    reference_members = [member.sel(time=common_time) for member in reference_members]
+    common_time = skill["common_time"]
+    corrected_ensemble = skill["primary_ensemble"]
+    baseline_ensemble = skill["secondary_ensemble"]
+    reference = skill["reference"]
 
-    corrected_ensemble = xr.concat(corrected_members, dim="member").transpose(
-        "time", "member", "latitude", "longitude"
-    )
-    baseline_ensemble = xr.concat(baseline_members, dim="member").transpose(
-        "time", "member", "latitude", "longitude"
-    )
-    reference = reference_members[0].transpose("time", "latitude", "longitude")
+    corrected_np = skill["primary_np"]
+    baseline_np = skill["secondary_np"]
+    reference_np = skill["reference_np"]
 
-    corrected_np = corrected_ensemble.values
-    baseline_np = baseline_ensemble.values
-    reference_np = reference.values
+    mae_corrected_member = skill["mae_primary_member"]
+    mae_baseline_member = skill["mae_secondary_member"]
 
-    mae_corrected_member = mae_per_member_grid(corrected_np, reference_np)
-    mae_baseline_member = mae_per_member_grid(baseline_np, reference_np)
-
-    rmse_corrected_member = rmse_per_member_grid(corrected_np, reference_np)
-    rmse_baseline_member = rmse_per_member_grid(baseline_np, reference_np)
+    rmse_corrected_member = skill["rmse_primary_member"]
+    rmse_baseline_member = skill["rmse_secondary_member"]
 
     mae_corrected = np.nanmean(mae_corrected_member, axis=0)
     mae_baseline = np.nanmean(mae_baseline_member, axis=0)
@@ -146,53 +99,18 @@ def evaluate_spei(
     rmse_baseline = np.nanmean(rmse_baseline_member, axis=0)
     rmse_diff = rmse_corrected - rmse_baseline
 
-    bss_upper, bs_corrected_upper, bs_baseline_upper = (
-        brier_skill_score_between_ensembles(
-            corrected_np,
-            baseline_np,
-            reference_np,
-            std_multiplier=std_multiplier,
-            extreme_type="upper",
-        )
-    )
-    bss_lower, bs_corrected_lower, bs_baseline_lower = (
-        brier_skill_score_between_ensembles(
-            corrected_np,
-            baseline_np,
-            reference_np,
-            std_multiplier=-1.0,
-            extreme_type="lower",
-        )
-    )
+    bss_upper = skill["bss_upper"]
+    bss_lower = skill["bss_lower"]
+    bs_corrected_upper = skill["bs_primary_upper"]
+    bs_baseline_upper = skill["bs_secondary_upper"]
+    bs_corrected_lower = skill["bs_primary_lower"]
+    bs_baseline_lower = skill["bs_secondary_lower"]
 
     if plot_dir is not None:
-        plot_dir = Path(plot_dir) / "rf_spei_results"
-        plot_dir.mkdir(parents=True, exist_ok=True)
-
-        plot_mae_skill_metrics(
-            mae_baseline_member,
-            mae_corrected_member,
-            out_dir=str(plot_dir),
-            n_members_display=3,
-            metric_name="MAE",
-            file_prefix="mae",
-        )
-
-        plot_mae_skill_metrics(
-            rmse_baseline_member,
-            rmse_corrected_member,
-            out_dir=str(plot_dir),
-            n_members_display=3,
-            metric_name="RMSE",
-            file_prefix="rmse",
-        )
-
-        plot_bss_skill_metrics(
-            bss_upper,
-            bss_lower,
-            out_dir=str(plot_dir),
-            upper_threshold_label="mean + 1σ",
-            lower_threshold_label="mean - 1σ",
+        plot_pairwise_skill_evaluation(
+            plot_dir=Path(plot_dir) / "rf_spei_results",
+            skill=skill,
+            land_mask_path=land_mask_path,
         )
 
     return {
@@ -223,6 +141,7 @@ def evaluate_spei_pair(
     member_dim="member",
     std_multiplier=1.0,
     plot_dir=None,
+    land_mask_path: Path | None = None,
 ):
     """
     Generic SPEI evaluation: compare two SPEI outputs against a reference.
@@ -239,8 +158,6 @@ def evaluate_spei_pair(
     output_da = _to_time_member_lat_lon(output_da, member_dim)
     gt_da = _to_time_member_lat_lon(gt_da, member_dim)
     reference_da = _to_time_lat_lon(reference_da)
-
-    lat_name, lon_name = _infer_lat_lon_names(reference_da)
 
     output_np = output_da.values
     gt_np = gt_da.values
@@ -276,33 +193,26 @@ def evaluate_spei_pair(
     )
 
     if plot_dir is not None:
-        plot_dir = Path(plot_dir) / "rf_spei_results"
-        plot_dir.mkdir(parents=True, exist_ok=True)
-
-        plot_mae_skill_metrics(
-            mae_gt_member,
-            mae_output_member,
-            out_dir=str(plot_dir),
-            n_members_display=3,
-            metric_name="MAE",
-            file_prefix="mae",
-        )
-
-        plot_mae_skill_metrics(
-            rmse_gt_member,
-            rmse_output_member,
-            out_dir=str(plot_dir),
-            n_members_display=3,
-            metric_name="RMSE",
-            file_prefix="rmse",
-        )
-
-        plot_bss_skill_metrics(
-            bss_upper,
-            bss_lower,
-            out_dir=str(plot_dir),
-            upper_threshold_label="mean + 1σ",
-            lower_threshold_label="mean - 1σ",
+        helper_skill = {
+            "mae_secondary_member": mae_gt_member,
+            "mae_primary_member": mae_output_member,
+            "rmse_secondary_member": rmse_gt_member,
+            "rmse_primary_member": rmse_output_member,
+            "mean_bias_secondary_member": np.nanmean(
+                gt_np - reference_np[:, None, :, :], axis=0
+            ),
+            "mean_bias_primary_member": np.nanmean(
+                output_np - reference_np[:, None, :, :], axis=0
+            ),
+            "bss_upper": bss_upper,
+            "bss_lower": bss_lower,
+            "bss_p90_upper": bss_upper,
+            "bss_p10_lower": bss_lower,
+        }
+        plot_pairwise_skill_evaluation(
+            plot_dir=Path(plot_dir) / "rf_spei_results",
+            skill=helper_skill,
+            land_mask_path=land_mask_path,
         )
 
     return {

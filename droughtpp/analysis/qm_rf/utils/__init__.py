@@ -3,6 +3,7 @@
 __all__ = [
     "evaluation",
     "cwb_evaluation",
+    "intensity_evaluation",
     "spei_evaluation",
     "spei_from_rf",
     "visualization",

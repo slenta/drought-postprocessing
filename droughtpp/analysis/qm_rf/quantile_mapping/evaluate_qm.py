@@ -39,11 +39,12 @@ def run_qm_evaluation(
     # Load reference data once
     ref_ds = xr.open_dataset(cfg["reference_data"])
     ref_da = ref_ds[cfg["var_name"]]
-    
+    var_name = cfg["var_name"]
+
     # Load all hindcast files
     with open(cfg["hindcasts_json"], "r") as fh:
         hind_files = json.load(fh)
-    
+
     hind_das = []
     for fp in tqdm(hind_files, desc="Loading hindcasts"):
         ds = xr.open_dataset(fp)
@@ -51,12 +52,13 @@ def run_qm_evaluation(
         ds.close()
 
     for leadmonth in cfg["leadmonth"]:
-        qm_plot_dir = Path(cfg["plot_dir"]) / "qm" / f"lm{leadmonth}"
+        qm_plot_dir = Path(cfg["plot_dir"]) / var_name / "qm" / f"lm{leadmonth}"
         qm_plot_dir.mkdir(parents=True, exist_ok=True)
 
-        qm_out_dir = Path(cfg["output_dir"]) / "data" / f"lm{leadmonth}"
+        qm_out_dir = Path(cfg["output_dir"]) / var_name / "data" / f"lm{leadmonth}"
         qm_json_path = (
             Path(cfg["output_dir"])
+            / var_name
             / "paths"
             / f"lm{leadmonth}"
             / "qm_hindcast_paths.json"
@@ -65,20 +67,20 @@ def run_qm_evaluation(
         # Load QM files for this leadmonth
         with open(qm_json_path, "r") as fh:
             qm_files = json.load(fh)
-        
+
         qm_das = []
         for fp in qm_files:
             ds = xr.open_dataset(fp)
             qm_das.append(ds[cfg["var_name"]])
             ds.close()
-        
+
         # Compute common time across ref, hind, and qm
         common_time = ref_da["time"].values
         for da in hind_das:
             common_time = np.intersect1d(common_time, da["time"].values)
         for da in qm_das:
             common_time = np.intersect1d(common_time, da["time"].values)
-        
+
         # Subset all to common time
         ref_subset = ref_da.sel(time=common_time)
         hind_subsets = [da.sel(time=common_time) for da in hind_das]
@@ -102,8 +104,9 @@ def run_qm_evaluation(
             ref_subset=ref_subset,
             var_name=cfg["var_name"],
             plot_dir=str(qm_plot_dir),
+            land_mask_path=cfg.get("land_mask_path"),
         )
-    
+
     ref_ds.close()
 
 
@@ -113,11 +116,12 @@ def compute_qm_skill_metrics(
     ref_subset,
     var_name="tas",
     plot_dir="qm_plots",
+    land_mask_path=None,
 ):
     """
     Compute skill metrics (BSS, MAE, RMSE, mean bias) comparing
     quantile-mapped hindcasts to original hindcasts.
-    
+
     Args:
         hind_subsets: list of pre-aligned, pre-subset xarray DataArrays (hindcasts)
         qm_subsets: list of pre-aligned, pre-subset xarray DataArrays (QM)
@@ -125,10 +129,12 @@ def compute_qm_skill_metrics(
         var_name: variable name
         plot_dir: output directory for plots
     """
+
     def _normalize_time_to_date(da):
         return da.assign_coords(time=da["time"].values.astype("datetime64[D]"))
 
     ref_subset = _normalize_time_to_date(ref_subset)
+    print(land_mask_path)
 
     # Stack ensemble members from the list of DataArrays
     original_ensemble = []
@@ -140,7 +146,7 @@ def compute_qm_skill_metrics(
     ):
         hind_da = _normalize_time_to_date(hind_da)
         qm_da = _normalize_time_to_date(qm_da)
-        
+
         original_ensemble.append(hind_da)
         qm_ensemble.append(qm_da)
 
@@ -150,9 +156,7 @@ def compute_qm_skill_metrics(
     original_ensemble = np.squeeze(
         np.stack([da.values for da in original_ensemble], axis=1)
     )
-    qm_ensemble = np.squeeze(
-        np.stack([da.values for da in qm_ensemble], axis=1)
-    )
+    qm_ensemble = np.squeeze(np.stack([da.values for da in qm_ensemble], axis=1))
 
     time_coord = ref_subset["time"].values
     member_coord = np.arange(original_ensemble.shape[1])
@@ -197,6 +201,7 @@ def compute_qm_skill_metrics(
         n_members_display=1,
         n_timesteps=3,
         variable_name=var_name,
+        land_mask_path=land_mask_path,
     )
 
     # Compute MAE
@@ -237,6 +242,7 @@ def compute_qm_skill_metrics(
         n_members_display=3,
         metric_name="MAE",
         file_prefix="mae",
+        land_mask_path=land_mask_path,
     )
 
     # Plot RMSE skill metrics
@@ -247,6 +253,7 @@ def compute_qm_skill_metrics(
         n_members_display=3,
         metric_name="RMSE",
         file_prefix="rmse",
+        land_mask_path=land_mask_path,
     )
 
     # Plot mean bias skill metrics
@@ -257,6 +264,7 @@ def compute_qm_skill_metrics(
         n_members_display=3,
         metric_name="Mean Bias",
         file_prefix="mean_bias",
+        land_mask_path=land_mask_path,
     )
 
     # Plot BSS skill metrics
@@ -266,6 +274,7 @@ def compute_qm_skill_metrics(
         out_dir=plot_dir,
         upper_threshold_label="mean + 1σ",
         lower_threshold_label="mean - 1σ",
+        land_mask_path=land_mask_path,
     )
 
 

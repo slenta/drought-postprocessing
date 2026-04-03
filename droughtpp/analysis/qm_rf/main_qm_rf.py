@@ -47,6 +47,7 @@ def run_qm_then_rf(
     if (
         run_rf_evaluate
         or cfg["workflow"].get("evaluate_cwb", False)
+        or cfg["workflow"].get("evaluate_intensity", False)
         or cfg["workflow"].get("evaluate_spei", False)
     ):
         rf_evaluate()

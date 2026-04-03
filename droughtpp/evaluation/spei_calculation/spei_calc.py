@@ -227,10 +227,10 @@ def _compute_spei_for_path_list(
 ) -> list[str]:
     written_paths = []
     for input_path in input_paths:
-        output_path = output_dir / f"{input_path.stem}_spei.nc"
+        out_path = output_dir / f"{input_path.stem}_spei.nc"
         written_path = _compute_and_save_spei(
             input_path=input_path,
-            output_path=output_path,
+            out_path=out_path,
             input_var=input_var,
             output_var=output_var,
             month_range=month_range,

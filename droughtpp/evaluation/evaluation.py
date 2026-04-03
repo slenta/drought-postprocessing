@@ -513,10 +513,13 @@ def plot_ensemble_correlation_maps(
             member_label = "Ensemble Mean" if i == n_ens - 1 else f"Member {i+1}"
             ax.set_title(f"{member_label}: {map_titles[j]}")
 
-            # Add colorbar
-            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="Correlation")
+            im_last = im
 
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    # Add single shared colorbar
+    cbar_ax = fig.add_axes([0.92, 0.1, 0.02, 0.8])
+    fig.colorbar(im_last, cax=cbar_ax, label="Correlation")
+
+    plt.tight_layout(rect=[0, 0, 0.9, 0.97])
     plt.savefig(
         f"{save_path}/images/{title.replace(' ', '_')}.png",
         bbox_inches="tight",
@@ -567,6 +570,8 @@ def plot_ensemble_rmse_maps(
     vmax_diff = np.nanmax(rmse_array[-1, 2])
 
     for i in range(n_ens):
+        im_ylord = None
+        im_coolwarm = None
         for j in range(n_maps):
             # Create subplot with cartopy projection
             ax = fig.add_subplot(
@@ -574,7 +579,7 @@ def plot_ensemble_rmse_maps(
             )
 
             if j != 2:
-                im = ax.imshow(
+                im_ylord = ax.imshow(
                     rmse_array[i, j],
                     origin="lower",
                     cmap="YlOrRd",
@@ -584,7 +589,7 @@ def plot_ensemble_rmse_maps(
                     transform=ccrs.PlateCarree(),
                 )
             elif j == 2:
-                im = ax.imshow(
+                im_coolwarm = ax.imshow(
                     rmse_array[i, j],
                     origin="lower",
                     cmap="coolwarm",
@@ -617,10 +622,16 @@ def plot_ensemble_rmse_maps(
             member_label = "Ensemble Mean" if i == n_ens - 1 else f"Member {i+1}"
             ax.set_title(f"{member_label}: {map_titles[j]}")
 
-            # Add colorbar
-            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="RMSE")
+    # Add shared colorbars
+    cbar_ax1 = fig.add_axes([0.92, 0.55, 0.02, 0.4])
+    if im_ylord is not None:
+        fig.colorbar(im_ylord, cax=cbar_ax1, label="RMSE")
 
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    cbar_ax2 = fig.add_axes([0.92, 0.1, 0.02, 0.4])
+    if im_coolwarm is not None:
+        fig.colorbar(im_coolwarm, cax=cbar_ax2, label="RMSE")
+
+    plt.tight_layout(rect=[0, 0, 0.9, 0.97])
     plt.savefig(
         f"{save_path}/images/{title.replace(' ', '_')}.png",
         bbox_inches="tight",

@@ -4,8 +4,43 @@ import xarray as xr
 import pandas as pd
 import time
 from tqdm import tqdm
+from pathlib import Path
+import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
+from .knn_random_effects import LocalKNNRandomEffectsRegressor
+
+
+class MixedEffectsTreeRegressor:
+    def __init__(self, base_model, group_effects: dict[str, float], group_by: str):
+        self.base_model = base_model
+        self.group_effects = group_effects
+        self.group_by = group_by
+
+    def predict(self, X, groups):
+        groups_arr = np.asarray(groups).astype(str)
+        fixed = self.base_model.predict(X)
+        re = np.array([self.group_effects.get(g, 0.0) for g in groups_arr], dtype=float)
+        return fixed + re
+
+    def predict_components(self, X, groups):
+        """
+        Predict and return both fixed (base) and random (group) effects separately.
+        Returns tuple: (fixed_effects, random_effects, combined_prediction)
+        """
+        groups_arr = np.asarray(groups).astype(str)
+        fixed = self.base_model.predict(X)
+        re = np.array([self.group_effects.get(g, 0.0) for g in groups_arr], dtype=float)
+        combined = fixed + re
+        return fixed, re, combined
+
+    def get_group_effects_df(self):
+        """Return group effects as a sorted DataFrame."""
+        df = pd.DataFrame(
+            list(self.group_effects.items()), columns=[self.group_by, "effect"]
+        )
+        df = df.sort_values("effect", key=abs, ascending=False)
+        return df
 
 
 class RandomForestBiasCorrector:
@@ -21,8 +56,148 @@ class RandomForestBiasCorrector:
     """
 
     def __init__(self):
-        self.model: _t.Optional[_t.Union[RandomForestRegressor, XGBRegressor]] = None
+        self.model: _t.Optional[
+            _t.Union[
+                RandomForestRegressor,
+                XGBRegressor,
+                MixedEffectsTreeRegressor,
+                LocalKNNRandomEffectsRegressor,
+            ]
+        ] = None
         self.training_history: _t.Optional[dict] = None
+
+    def _train_xgboost(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        X_val: _t.Optional[pd.DataFrame],
+        y_val: _t.Optional[pd.Series],
+        n_estimators: int,
+        random_state: int,
+        xgb_learning_rate: float,
+        xgb_max_depth: int,
+        xgb_subsample: float,
+        xgb_colsample_bytree: float,
+        xgb_min_child_weight: float,
+        xgb_eval_metric: str,
+    ) -> XGBRegressor:
+        xgb = XGBRegressor(
+            n_estimators=n_estimators,
+            random_state=random_state,
+            learning_rate=xgb_learning_rate,
+            max_depth=xgb_max_depth,
+            subsample=xgb_subsample,
+            colsample_bytree=xgb_colsample_bytree,
+            min_child_weight=xgb_min_child_weight,
+            eval_metric=xgb_eval_metric,
+            objective="reg:squarederror",
+            n_jobs=-1,
+        )
+        if X_val is not None and y_val is not None:
+            eval_set = [(X.values, y.values), (X_val.values, y_val.values)]
+        else:
+            eval_set = [(X.values, y.values)]
+
+        xgb.fit(
+            X.values,
+            y.values,
+            eval_set=eval_set,
+            verbose=False,
+        )
+
+        evals_result = xgb.evals_result()
+        train_key = "validation_0"
+        val_key = "validation_1"
+        train_hist = evals_result.get(train_key, {}).get(xgb_eval_metric, [])
+        val_hist = evals_result.get(val_key, {}).get(xgb_eval_metric, [])
+        n_rounds = list(range(1, len(train_hist) + 1))
+        self.training_history = {
+            "model_type": "xgboost",
+            "metric": xgb_eval_metric,
+            "x": n_rounds,
+            "train": train_hist,
+            "val": val_hist if len(val_hist) > 0 else None,
+        }
+        return xgb
+
+    def _train_rf(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        X_val: _t.Optional[pd.DataFrame],
+        y_val: _t.Optional[pd.Series],
+        n_estimators: int,
+        chunk_size: int,
+        random_state: int,
+        rf_max_depth: _t.Optional[int],
+        rf_min_samples_leaf: int,
+        rf_max_features: _t.Union[str, int, float, None],
+    ) -> RandomForestRegressor:
+        start = time.time()
+        total_done = 0
+        first = min(chunk_size, n_estimators)
+
+        rf = RandomForestRegressor(
+            n_estimators=first,
+            warm_start=True,
+            n_jobs=-1,
+            random_state=random_state,
+            max_depth=rf_max_depth,
+            min_samples_leaf=rf_min_samples_leaf,
+            max_features=rf_max_features,
+        )
+        rf.fit(X.values, y.values)
+        total_done += first
+
+        train_rmse = [float(np.sqrt(np.mean((rf.predict(X.values) - y.values) ** 2)))]
+        val_rmse = []
+        if X_val is not None and y_val is not None:
+            val_rmse.append(
+                float(np.sqrt(np.mean((rf.predict(X_val.values) - y_val.values) ** 2)))
+            )
+        trees_hist = [total_done]
+
+        pbar = tqdm(total=n_estimators, desc="RF training", unit="trees")
+        pbar.update(first)
+
+        while total_done < n_estimators:
+            chunk_start = time.time()
+            add = min(chunk_size, n_estimators - total_done)
+            rf.n_estimators = total_done + add
+            rf.fit(X.values, y.values)
+            total_done += add
+            chunk_time = time.time() - chunk_start
+
+            elapsed = time.time() - start
+            avg_per_tree = elapsed / total_done
+            remaining = n_estimators - total_done
+            eta = remaining * avg_per_tree
+
+            pbar.update(add)
+            print(
+                f"Elapsed {elapsed:.0f}s — trees {total_done}/{n_estimators} — last_chunk {chunk_time:.1f}s — ETA {eta:.0f}s"
+            )
+
+            trees_hist.append(total_done)
+            train_rmse.append(
+                float(np.sqrt(np.mean((rf.predict(X.values) - y.values) ** 2)))
+            )
+            if X_val is not None and y_val is not None:
+                val_rmse.append(
+                    float(
+                        np.sqrt(np.mean((rf.predict(X_val.values) - y_val.values) ** 2))
+                    )
+                )
+
+        pbar.close()
+        self.training_history = {
+            "model_type": "rf",
+            "metric": "rmse",
+            "x": trees_hist,
+            "train": train_rmse,
+            "val": val_rmse if len(val_rmse) > 0 else None,
+        }
+        return rf
 
     @staticmethod
     def _stack_by_samples(da: xr.DataArray) -> xr.DataArray:
@@ -83,7 +258,10 @@ class RandomForestBiasCorrector:
         y: pd.Series,
         X_val: _t.Optional[pd.DataFrame] = None,
         y_val: _t.Optional[pd.Series] = None,
+        groups: _t.Optional[_t.Sequence[_t.Any]] = None,
         model_type: str = "rf",
+        mixed_base_model: str = "rf",
+        mixed_group_by: str = "grid_id",
         n_estimators: int = 100,
         chunk_size: int = 10,
         random_state: int = 0,
@@ -93,113 +271,125 @@ class RandomForestBiasCorrector:
         xgb_colsample_bytree: float = 0.8,
         xgb_min_child_weight: float = 1.0,
         xgb_eval_metric: str = "rmse",
-    ) -> _t.Union[RandomForestRegressor, XGBRegressor]:
+        rf_max_depth: _t.Optional[int] = None,
+        rf_min_samples_leaf: int = 1,
+        rf_max_features: _t.Union[str, int, float, None] = "sqrt",
+        knn_neighbor_features: _t.Optional[np.ndarray] = None,
+        knn_k: int = 15,
+        knn_metric: str = "euclidean",
+        knn_eps: float = 1e-8,
+    ) -> _t.Union[
+        RandomForestRegressor,
+        XGBRegressor,
+        MixedEffectsTreeRegressor,
+        LocalKNNRandomEffectsRegressor,
+    ]:
 
         model_type = str(model_type).lower()
         if model_type in {"xgb", "xgboost"}:
-            xgb = XGBRegressor(
-                n_estimators=n_estimators,
-                random_state=random_state,
-                learning_rate=xgb_learning_rate,
-                max_depth=xgb_max_depth,
-                subsample=xgb_subsample,
-                colsample_bytree=xgb_colsample_bytree,
-                min_child_weight=xgb_min_child_weight,
-                eval_metric=xgb_eval_metric,
-                objective="reg:squarederror",
-                n_jobs=-1,
+            model = self._train_xgboost(
+                X,
+                y,
+                X_val,
+                y_val,
+                n_estimators,
+                random_state,
+                xgb_learning_rate,
+                xgb_max_depth,
+                xgb_subsample,
+                xgb_colsample_bytree,
+                xgb_min_child_weight,
+                xgb_eval_metric,
             )
-            if X_val is not None and y_val is not None:
-                eval_set = [(X.values, y.values), (X_val.values, y_val.values)]
+            self.model = model
+            return model
+
+        if model_type in {"mixed_rf", "mixed"}:
+            if groups is None:
+                raise ValueError("groups are required for mixed_rf training")
+
+            mixed_base = str(mixed_base_model).lower()
+            if mixed_base in {"xgb", "xgboost"}:
+                base_model = self._train_xgboost(
+                    X,
+                    y,
+                    X_val,
+                    y_val,
+                    n_estimators,
+                    random_state,
+                    xgb_learning_rate,
+                    xgb_max_depth,
+                    xgb_subsample,
+                    xgb_colsample_bytree,
+                    xgb_min_child_weight,
+                    xgb_eval_metric,
+                )
             else:
-                eval_set = [(X.values, y.values)]
-
-            xgb.fit(
-                X.values,
-                y.values,
-                eval_set=eval_set,
-                verbose=False,
-            )
-
-            evals_result = xgb.evals_result()
-            train_key = "validation_0"
-            val_key = "validation_1"
-            train_hist = evals_result.get(train_key, {}).get(xgb_eval_metric, [])
-            val_hist = evals_result.get(val_key, {}).get(xgb_eval_metric, [])
-            n_rounds = list(range(1, len(train_hist) + 1))
-            self.training_history = {
-                "model_type": "xgboost",
-                "metric": xgb_eval_metric,
-                "x": n_rounds,
-                "train": train_hist,
-                "val": val_hist if len(val_hist) > 0 else None,
-            }
-            self.model = xgb
-            return xgb
-
-        start = time.time()
-        total_done = 0
-        first = min(chunk_size, n_estimators)
-
-        rf = RandomForestRegressor(
-            n_estimators=first,
-            warm_start=True,
-            n_jobs=-1,
-            random_state=random_state,
-        )
-        rf.fit(X.values, y.values)
-        total_done += first
-
-        train_rmse = [float(np.sqrt(np.mean((rf.predict(X.values) - y.values) ** 2)))]
-        val_rmse = []
-        if X_val is not None and y_val is not None:
-            val_rmse.append(
-                float(np.sqrt(np.mean((rf.predict(X_val.values) - y_val.values) ** 2)))
-            )
-        trees_hist = [total_done]
-
-        pbar = tqdm(total=n_estimators, desc="RF training", unit="trees")
-        pbar.update(first)
-
-        while total_done < n_estimators:
-            chunk_start = time.time()
-            add = min(chunk_size, n_estimators - total_done)
-            rf.n_estimators = total_done + add
-            rf.fit(X.values, y.values)
-            total_done += add
-            chunk_time = time.time() - chunk_start
-
-            elapsed = time.time() - start
-            avg_per_tree = elapsed / total_done
-            remaining = n_estimators - total_done
-            eta = remaining * avg_per_tree
-
-            pbar.update(add)
-            print(
-                f"Elapsed {elapsed:.0f}s — trees {total_done}/{n_estimators} — last_chunk {chunk_time:.1f}s — ETA {eta:.0f}s"
-            )
-
-            trees_hist.append(total_done)
-            train_rmse.append(
-                float(np.sqrt(np.mean((rf.predict(X.values) - y.values) ** 2)))
-            )
-            if X_val is not None and y_val is not None:
-                val_rmse.append(
-                    float(
-                        np.sqrt(np.mean((rf.predict(X_val.values) - y_val.values) ** 2))
-                    )
+                base_model = self._train_rf(
+                    X,
+                    y,
+                    X_val,
+                    y_val,
+                    n_estimators,
+                    chunk_size,
+                    random_state,
+                    rf_max_depth,
+                    rf_min_samples_leaf,
+                    rf_max_features,
                 )
 
-        pbar.close()
-        self.training_history = {
-            "model_type": "rf",
-            "metric": "rmse",
-            "x": trees_hist,
-            "train": train_rmse,
-            "val": val_rmse if len(val_rmse) > 0 else None,
-        }
-        self.model = rf
-        return rf
+            group_mode = str(mixed_group_by).lower()
+            if group_mode in {"knn_spatial", "knn_feature"}:
+                knn_mode = "spatial" if group_mode == "knn_spatial" else "feature"
+                knn_model = LocalKNNRandomEffectsRegressor(
+                    base_model=base_model,
+                    mode=knn_mode,
+                    k=knn_k,
+                    metric=knn_metric,
+                    eps=knn_eps,
+                )
+                knn_model.fit(
+                    X_train=X.values,
+                    y_train=y.values,
+                    neighbor_features_train=np.asarray(knn_neighbor_features),
+                )
+                self.training_history["model_type"] = f"mixed_knn[{mixed_base}]"
+                self.model = knn_model
+                return knn_model
+
+            groups_arr = np.asarray(groups).astype(str)
+            fixed_preds = base_model.predict(X.values)
+            residuals = y.values - fixed_preds
+
+            group_effects_series = pd.Series(residuals).groupby(groups_arr).mean()
+            group_effects = {
+                str(group): float(effect)
+                for group, effect in group_effects_series.items()
+            }
+
+            mixed_model = MixedEffectsTreeRegressor(
+                base_model=base_model,
+                group_effects=group_effects,
+                group_by=mixed_group_by,
+            )
+            self.training_history["model_type"] = f"mixed_rf[{mixed_base}]"
+            self.model = mixed_model
+            return mixed_model
+
+        model = self._train_rf(
+            X,
+            y,
+            X_val,
+            y_val,
+            n_estimators,
+            chunk_size,
+            random_state,
+            rf_max_depth,
+            rf_min_samples_leaf,
+            rf_max_features,
+        )
+        self.model = model
+        return model
 
     def apply_rf_correction(
         self,
@@ -257,4 +447,244 @@ class RandomForestBiasCorrector:
         ds_pred.to_netcdf(residual_path)
 
 
-# ...existing code...
+def analyze_merf_contributions(
+    model: _t.Union[MixedEffectsTreeRegressor, XGBRegressor],
+    X: np.ndarray,
+    groups: np.ndarray,
+    y_true: _t.Optional[np.ndarray] = None,
+):
+    """
+    Analyze MERF model contributions (base term vs. group effects).
+    Returns a dictionary with diagnostics and creates a summary table.
+
+    Args:
+        model: Trained MixedEffectsTreeRegressor or plain model
+        X: Feature matrix
+        groups: Group labels for each sample
+        y_true: Optional true values for error computation
+
+    Returns:
+        dict with keys: group_effects_df, base_stats, random_stats, summary_table, plots (optional)
+    """
+    if not isinstance(model, MixedEffectsTreeRegressor):
+        print("Model is not a MERF; skipping component analysis.")
+        return None
+
+    # Get component predictions
+    fixed, re, combined = model.predict_components(X, groups)
+
+    # Group effects DataFrame
+    group_effects_df = model.get_group_effects_df()
+
+    # Statistics on fixed term
+    base_stats = {
+        "mean": float(np.nanmean(fixed)),
+        "std": float(np.nanstd(fixed)),
+        "min": float(np.nanmin(fixed)),
+        "max": float(np.nanmax(fixed)),
+        "range": float(np.nanmax(fixed) - np.nanmin(fixed)),
+    }
+
+    # Statistics on random effects
+    random_stats = {
+        "n_groups": len(model.group_effects),
+        "mean": float(np.nanmean(re)),
+        "std": float(np.nanstd(re)),
+        "min": float(np.nanmin(re)),
+        "max": float(np.nanmax(re)),
+        "range": float(np.nanmax(re) - np.nanmin(re)),
+        "pct_nonzero": 100.0 * np.sum(np.abs(re) > 1e-10) / len(re),
+    }
+
+    # Contribution analysis
+    abs_fixed = np.abs(fixed)
+    abs_re = np.abs(re)
+    eps = 1e-10
+    contribution_ratio = abs_re / (abs_fixed + abs_re + eps)
+
+    results = {
+        "group_effects": model.group_effects,
+        "group_effects_df": group_effects_df,
+        "base_stats": base_stats,
+        "random_stats": random_stats,
+        "base_predictions": fixed,
+        "group_effects_predictions": re,
+        "combined_predictions": combined,
+        "contribution_ratio_groups": np.nanmean(contribution_ratio),
+        "max_contribution_ratio": np.nanmax(contribution_ratio),
+    }
+
+    base_rmse = float(np.sqrt(np.nanmean((fixed - y_true) ** 2)))
+    combined_rmse = float(np.sqrt(np.nanmean((combined - y_true) ** 2)))
+    results["base_rmse"] = base_rmse
+    results["combined_rmse"] = combined_rmse
+    results["rmse_improvement"] = base_rmse - combined_rmse
+
+    return results
+
+
+def save_merf_diagnostics_plot(
+    diagnostics: dict,
+    output_path: _t.Union[str, Path],
+    decimals: int = 4,
+    figsize: tuple = (14, 10),
+):
+    """
+    Save MERF diagnostics as a formatted table plot (PNG file).
+
+    Args:
+        diagnostics: Output from analyze_merf_contributions()
+        output_path: Path where to save the PNG file
+        decimals: Number of decimal places for formatting
+        figsize: Figure size as (width, height)
+    """
+    if diagnostics is None:
+        return
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fmt = f".{decimals}f"
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.axis("off")
+
+    # Prepare table data
+    table_data = []
+    table_data.append(["MERF Diagnostics", ""])
+    table_data.append(["", ""])
+
+    # Group effects section
+    table_data.append(["Group Effects Statistics", ""])
+    n_groups = diagnostics["random_stats"]["n_groups"]
+    table_data.append([f"  Number of Groups", f"{n_groups}"])
+    table_data.append(
+        [f"  Mean Effect", f"{diagnostics['random_stats']['mean']:{fmt}}"]
+    )
+    table_data.append([f"  Std Dev", f"{diagnostics['random_stats']['std']:{fmt}}"])
+    table_data.append([f"  Min Effect", f"{diagnostics['random_stats']['min']:{fmt}}"])
+    table_data.append([f"  Max Effect", f"{diagnostics['random_stats']['max']:{fmt}}"])
+    table_data.append([f"  Range", f"{diagnostics['random_stats']['range']:{fmt}}"])
+    table_data.append(
+        [f"  % Non-zero Samples", f"{diagnostics['random_stats']['pct_nonzero']:.1f}%"]
+    )
+    table_data.append(["", ""])
+
+    # Base term section
+    table_data.append(["Base (Fixed) Term Statistics", ""])
+    table_data.append([f"  Mean", f"{diagnostics['base_stats']['mean']:{fmt}}"])
+    table_data.append([f"  Std Dev", f"{diagnostics['base_stats']['std']:{fmt}}"])
+    table_data.append([f"  Min", f"{diagnostics['base_stats']['min']:{fmt}}"])
+    table_data.append([f"  Max", f"{diagnostics['base_stats']['max']:{fmt}}"])
+    table_data.append([f"  Range", f"{diagnostics['base_stats']['range']:{fmt}}"])
+    table_data.append(["", ""])
+
+    # Contribution analysis
+    table_data.append(["Contribution Analysis", ""])
+    table_data.append(
+        [
+            f"  Avg Group Effect %",
+            f"{diagnostics['contribution_ratio_groups']*100:.1f}%",
+        ]
+    )
+    table_data.append(
+        [f"  Max Group Effect %", f"{diagnostics['max_contribution_ratio']*100:.1f}%"]
+    )
+    table_data.append(["", ""])
+
+    # Error metrics (if available)
+    if "base_rmse" in diagnostics:
+        table_data.append(["Error Metrics (Validation Set)", ""])
+        table_data.append([f"  Base Model RMSE", f"{diagnostics['base_rmse']:{fmt}}"])
+        table_data.append(
+            [f"  MERF Model RMSE", f"{diagnostics['combined_rmse']:{fmt}}"]
+        )
+        table_data.append(
+            [f"  RMSE Improvement", f"{diagnostics['rmse_improvement']:{fmt}}"]
+        )
+        if abs(diagnostics["rmse_improvement"]) > 1e-6:
+            pct = (diagnostics["rmse_improvement"] / diagnostics["base_rmse"]) * 100
+            table_data.append([f"  % Improvement", f"{pct:.1f}%"])
+        table_data.append(["", ""])
+
+    # Create table
+    table = ax.table(
+        cellText=table_data,
+        cellLoc="left",
+        loc="upper left",
+        colWidths=[0.6, 0.4],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 2)
+
+    # Style header rows
+    for i in [0, 2, 9, 12, 15]:
+        if i < len(table_data):
+            table[(i, 0)].set_facecolor("#4472C4")
+            table[(i, 0)].set_text_props(weight="bold", color="white")
+            table[(i, 1)].set_facecolor("#4472C4")
+            table[(i, 1)].set_text_props(weight="bold", color="white")
+
+    # Alternate row shading
+    for i, row in enumerate(table_data):
+        if i not in [0, 2, 9, 12, 15, 1] and row != ["", ""]:
+            if i % 2 == 0:
+                table[(i, 0)].set_facecolor("#E8F0F8")
+                table[(i, 1)].set_facecolor("#E8F0F8")
+
+    plt.tight_layout()
+    plt.savefig(str(output_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    # Also save top group effects as separate table if available
+    if "group_effects_df" in diagnostics:
+        top_groups_path = output_path.parent / f"{output_path.stem}_top_groups.png"
+        _save_group_effects_table(
+            diagnostics["group_effects_df"], top_groups_path, decimals
+        )
+
+
+def _save_group_effects_table(
+    group_effects_df: pd.DataFrame,
+    output_path: _t.Union[str, Path],
+    decimals: int = 4,
+    n_top: int = 15,
+):
+    """Save top group effects as a separate formatted table."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    df_top = group_effects_df.head(n_top).copy()
+    df_top.columns = ["Group", "Effect"]
+    df_top["Effect"] = df_top["Effect"].apply(lambda x: f"{x:.{decimals}f}")
+
+    fig, ax = plt.subplots(figsize=(10, max(6, n_top * 0.4)))
+    ax.axis("off")
+
+    table_data = [["Group ID", "Effect"]] + df_top.values.tolist()
+
+    table = ax.table(
+        cellText=table_data,
+        cellLoc="center",
+        loc="center",
+        colWidths=[0.7, 0.3],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 2)
+
+    # Header styling
+    for i in range(2):
+        table[(0, i)].set_facecolor("#4472C4")
+        table[(0, i)].set_text_props(weight="bold", color="white")
+
+    # Alternate row shading
+    for i in range(1, len(table_data)):
+        if i % 2 == 0:
+            table[(i, 0)].set_facecolor("#E8F0F8")
+            table[(i, 1)].set_facecolor("#E8F0F8")
+
+    plt.title(f"Top {n_top} Group Effects", fontsize=12, fontweight="bold", pad=20)
+    plt.tight_layout()
+    plt.savefig(str(output_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)

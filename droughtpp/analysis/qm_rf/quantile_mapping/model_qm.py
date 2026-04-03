@@ -33,11 +33,14 @@ def quantile_map_json(
 
     ref_ds = xr.open_dataset(cfg["reference_data"])
     ref_da = ref_ds[cfg["var_name"]]
+    var_name = cfg["var_name"]
 
     leadmonths = cfg["leadmonth"]
 
     for leadmonth in leadmonths:
-        leadmonth_data_dir = Path(cfg["output_dir"]) / "data" / f"lm{leadmonth}"
+        leadmonth_data_dir = (
+            Path(cfg["output_dir"]) / var_name / "data" / f"lm{leadmonth}"
+        )
         qm_hindcast_out_dir = leadmonth_data_dir / "qm_hindcast"
         qm_residuals_out_dir = leadmonth_data_dir / "qm_residuals"
         qm_hindcast_out_dir.mkdir(parents=True, exist_ok=True)
@@ -94,6 +97,7 @@ def quantile_map_json(
 
         qm_hindcast_paths_json = (
             Path(cfg["output_dir"])
+            / var_name
             / "paths"
             / f"lm{leadmonth}"
             / "qm_hindcast_paths.json"
@@ -104,6 +108,7 @@ def quantile_map_json(
 
         residuals_paths_json = (
             Path(cfg["output_dir"])
+            / var_name
             / "paths"
             / f"lm{leadmonth}"
             / "qm_residuals_paths.json"
@@ -115,6 +120,7 @@ def quantile_map_json(
     ref_ds.close()
     return str(
         Path(cfg["output_dir"])
+        / var_name
         / "paths"
         / f"lm{leadmonths[0]}"
         / "qm_hindcast_paths.json"

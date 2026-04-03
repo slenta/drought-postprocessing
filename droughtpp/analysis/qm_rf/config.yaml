@@ -1,14 +1,26 @@
+
 project_root: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing"
 external_data_root: "/work/bk1318/k202208/crai/hindcast-pp/data"
 
 experiment: "cwb"
 leadtime_tag: "lm1-6"
 
-hindcasts_json: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf/paths/preprocessing/hindcast_cwb_month_window_paths_06-11.json"
 residuals_json: "${output_dir}/data/paths/qm_residuals_paths.json"
 
-reference_data: "/work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/eval_results/cwb/qm_rf/data/preprocessing/reference_cwb/reference_cwb_000.nc"
-reference: "${reference_data}"
+preprocessing_target: "cwb"
+preprocessing_options:
+  cwb:
+    hindcasts_json: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf/paths/preprocessing/hindcast_cwb_month_window_paths_06-11.json"
+    reference_data: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf/data/preprocessing/reference_cwb/reference_cwb_000.nc"
+    reference: "${reference_data}"
+    var_name: "CWB"
+    predictor_vars: ["CWB"]
+  cwb_intensity:
+    hindcasts_json: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf/paths/preprocessing/hindcast_cwb_month_window_intensity_paths_06-11.json"
+    reference_data: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf/data/preprocessing/reference_intensity/reference_cwb_000_intensity.nc"
+    reference: "${reference_data}"
+    var_name: "CWB_INTENSITY"
+    predictor_vars: ["CWB_INTENSITY"]
 
 output_dir: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf"
 model_dir: "${output_dir}/model"
@@ -16,8 +28,13 @@ model_name: "rf-basic"
 corrected_residuals_json: "${output_dir}/data/paths/corrected_residuals_paths.json"
 corrected_cwb_json: "${output_dir}/data/paths/corrected_cwb_paths.json"
 
-var_name: "CWB"
-predictor_vars: ["CWB"]
+include_obs_prev_lags: true
+
+feature_flags:
+  use_predictor: true
+  use_lat: false 
+  use_lon: false 
+  use_lead_month: false 
 additional_reference_features:
   - name: tas
     path: /work/bk1318/k202208/crai/hindcast-pp/data/spei/era5/tas/era5-monthly/tas_Amon_reanalysis_era5_r1i1p1_19400101-20241231_tamsatregion_dwdgrid_invlat.nc
@@ -39,7 +56,7 @@ workflow:
   run_qm_eval: true 
   run_rf_train: true 
   run_rf_evaluate: true 
-  evaluate_cwb: true 
+  evaluate_cwb: false 
   evaluate_spei: false 
 
 data_dir: "${external_data_root}/spei/"
@@ -49,12 +66,18 @@ spei_json: null
 leadmonth: [1, 2, 3, 4, 5, 6]
 
 ml_arguments:
-  n_estimators: 800
+  train_leadmonth_specific: true 
+  n_estimators: 700
   random_state: 0
   chunk_size: 30
-  model_type: "xgboost" # either "rf" or "xgboost"
+  model_type: "mixed_rf" # one of "rf", "xgboost", "mixed_rf"
+  mixed_base_model: "xgboost" # for mixed_rf: "rf" or "xgboost"
+  mixed_group_by: "grid_id" # one of "grid_id", "year", "grid_year", "calendar_month", "knn_spatial", "knn_feature"
+  knn_k: 15
+  knn_metric: "euclidean"
+  knn_eps: 1.0e-08
   xgb_learning_rate: 0.1
-  xgb_max_depth: 10
+  xgb_max_depth: 8
   xgb_subsample: 0.8
   xgb_colsample_bytree: 0.8
   xgb_min_child_weight: 1
@@ -66,6 +89,7 @@ qm_arguments:
   bins: 50
 
 plot_dir: "${output_dir}/plots/"
-rf_results_tag: "rf_results_${ml_arguments.model_type}_nest${ml_arguments.n_estimators}_cs${ml_arguments.chunk_size}_xgblr${ml_arguments.xgb_learning_rate}_xgbmd${ml_arguments.xgb_max_depth}_xgbss${ml_arguments.xgb_subsample}_xgbmcw${ml_arguments.xgb_min_child_weight}"
+land_mask_path: /work/bk1318/k202208/crai/hindcast-pp/data/spei/landmask.nc
+rf_results_tag: "rf_results_${ml_arguments.model_type}_base${ml_arguments.mixed_base_model}_groupby${ml_arguments.mixed_group_by}_nest${ml_arguments.n_estimators}_cs${ml_arguments.chunk_size}_xgblr${ml_arguments.xgb_learning_rate}_xgbmd${ml_arguments.xgb_max_depth}_xgbss${ml_arguments.xgb_subsample}_xgbmcw${ml_arguments.xgb_min_child_weight}_lm${ml_arguments.train_leadmonth_specific}"
 qm_json_path: "${output_dir}/data/paths/qm_hindcast_paths.json"
 show: false

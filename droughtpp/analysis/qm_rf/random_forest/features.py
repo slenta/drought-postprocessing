@@ -11,6 +11,8 @@ class RFFeatureBuilder:
         reference_data_path: Path,
         var_name: str,
         additional_reference_features=None,
+        include_obs_prev_lags: bool = True,
+        feature_flags: dict | None = None,
     ):
         with xr.open_dataset(reference_data_path) as ds:
             reference_data_array = ds[var_name].load()
@@ -36,6 +38,14 @@ class RFFeatureBuilder:
         self.reference_lon_index = {
             round(float(value), 6): index
             for index, value in enumerate(reference_longitudes)
+        }
+        self.include_obs_prev_lags = bool(include_obs_prev_lags)
+        raw_feature_flags = feature_flags or {}
+        self.feature_flags = {
+            "use_predictor": bool(raw_feature_flags.get("use_predictor", True)),
+            "use_lat": bool(raw_feature_flags.get("use_lat", True)),
+            "use_lon": bool(raw_feature_flags.get("use_lon", True)),
+            "use_lead_month": bool(raw_feature_flags.get("use_lead_month", True)),
         }
 
         self.additional_reference_features = []
@@ -170,32 +180,33 @@ class RFFeatureBuilder:
 
         valid_spatial = (lat_indices >= 0) & (lon_indices >= 0)
 
-        for year, first_month in first_month_by_year.items():
-            year_mask = years == int(year)
-            sample_mask = year_mask & valid_spatial
+        if self.include_obs_prev_lags:
+            for year, first_month in first_month_by_year.items():
+                year_mask = years == int(year)
+                sample_mask = year_mask & valid_spatial
 
-            if not np.any(sample_mask):
-                continue
-
-            sample_indices = np.where(sample_mask)[0]
-            sample_lat_indices = lat_indices[sample_indices]
-            sample_lon_indices = lon_indices[sample_indices]
-
-            for lag, target_array in (
-                (1, obs_prev_1),
-                (2, obs_prev_2),
-                (3, obs_prev_3),
-            ):
-                ref_year, ref_month = self._shift_year_month(year, first_month, lag)
-                time_index = self.reference_time_index.get((ref_year, ref_month))
-                if time_index is None:
+                if not np.any(sample_mask):
                     continue
 
-                reference_slice = self.reference_values[time_index]
-                target_array[sample_indices] = reference_slice[
-                    sample_lat_indices,
-                    sample_lon_indices,
-                ]
+                sample_indices = np.where(sample_mask)[0]
+                sample_lat_indices = lat_indices[sample_indices]
+                sample_lon_indices = lon_indices[sample_indices]
+
+                for lag, target_array in (
+                    (1, obs_prev_1),
+                    (2, obs_prev_2),
+                    (3, obs_prev_3),
+                ):
+                    ref_year, ref_month = self._shift_year_month(year, first_month, lag)
+                    time_index = self.reference_time_index.get((ref_year, ref_month))
+                    if time_index is None:
+                        continue
+
+                    reference_slice = self.reference_values[time_index]
+                    target_array[sample_indices] = reference_slice[
+                        sample_lat_indices,
+                        sample_lon_indices,
+                    ]
 
         additional_lag_features = {}
         for feature in self.additional_reference_features:
@@ -276,20 +287,31 @@ class RFFeatureBuilder:
             additional_lag_features[f"{feature_name}_prev_2"] = feature_prev_2
             additional_lag_features[f"{feature_name}_prev_3"] = feature_prev_3
 
-        features = pd.DataFrame(
-            {
-                "predictor": predictor_stacked.values,
-                "lat": latitudes,
-                "lon": longitudes,
-                "lead_month": lead_months,
-                "obs_prev_1": obs_prev_1,
-                "obs_prev_2": obs_prev_2,
-                "obs_prev_3": obs_prev_3,
-            }
-        )
+        n_samples = predictor_stacked.sizes["sample"]
+        feature_columns = {}
+        if self.feature_flags["use_predictor"]:
+            feature_columns["predictor"] = predictor_stacked.values
+        if self.feature_flags["use_lat"]:
+            feature_columns["lat"] = latitudes
+        if self.feature_flags["use_lon"]:
+            feature_columns["lon"] = longitudes
+        if self.feature_flags["use_lead_month"]:
+            feature_columns["lead_month"] = lead_months
+
+        if self.include_obs_prev_lags:
+            feature_columns["obs_prev_1"] = obs_prev_1
+            feature_columns["obs_prev_2"] = obs_prev_2
+            feature_columns["obs_prev_3"] = obs_prev_3
+
+        features = pd.DataFrame(index=np.arange(n_samples))
+        if feature_columns:
+            features = pd.concat([features, pd.DataFrame(feature_columns)], axis=1)
         if additional_lag_features:
             features = pd.concat(
                 [features, pd.DataFrame(additional_lag_features)], axis=1
             )
+
+        if features.shape[1] == 0:
+            raise ValueError("No ML features enabled. Check feature_flags in config.")
 
         return features, years

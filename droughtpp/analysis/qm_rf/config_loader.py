@@ -152,6 +152,31 @@ def _set_by_dotted_key(config: Dict[str, Any], dotted_key: str, value: Any) -> N
     current[parts[-1]] = value
 
 
+def _apply_preprocessing_target_selection(config: Dict[str, Any]) -> Dict[str, Any]:
+    target = config.get("preprocessing_target")
+    options = config.get("preprocessing_options")
+
+    if target is None or options is None:
+        return config
+
+    if not isinstance(options, dict):
+        raise ValueError("preprocessing_options must be a mapping")
+
+    selected = options.get(str(target))
+    if selected is None:
+        available = ", ".join(sorted(str(key) for key in options.keys()))
+        raise ValueError(
+            f"Unknown preprocessing_target '{target}'. Available options: {available}"
+        )
+
+    if not isinstance(selected, dict):
+        raise ValueError(
+            "Selected preprocessing option must be a mapping of config values"
+        )
+
+    return _deep_merge(config, selected)
+
+
 def _apply_overrides(
     config: Dict[str, Any], overrides: Iterable[str]
 ) -> Dict[str, Any]:
@@ -245,6 +270,8 @@ def load_qm_rf_config(
 
     if overrides:
         cfg = _apply_overrides(cfg, overrides)
+
+    cfg = _apply_preprocessing_target_selection(cfg)
 
     interpolated_cfg = _interpolate_config(cfg)
     set_qm_rf_global_config(interpolated_cfg)
