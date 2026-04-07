@@ -19,18 +19,53 @@ class LocalKNNRandomEffectsRegressor:
         k: int = 15,
         metric: str = "euclidean",
         eps: float = 1e-8,
+        weighting: str = "inverse_distance",
+        gaussian_sigma: _t.Optional[float] = None,
     ):
         mode = str(mode).lower()
+        weighting_norm = str(weighting).lower()
+        aliases = {
+            "inverse": "inverse_distance",
+            "inverse_distance": "inverse_distance",
+            "exp": "exponential",
+            "exponential": "exponential",
+            "gauss": "gaussian",
+            "gaussian": "gaussian",
+        }
+        if weighting_norm not in aliases:
+            raise ValueError(
+                "Unsupported KNN weighting. Use one of: "
+                "inverse_distance, exponential, gaussian"
+            )
 
         self.base_model = base_model
         self.mode = mode
         self.k = int(k)
         self.metric = str(metric)
         self.eps = float(eps)
+        self.weighting = aliases[weighting_norm]
+        self.gaussian_sigma = (
+            None if gaussian_sigma is None else max(float(gaussian_sigma), self.eps)
+        )
 
         self._nn: _t.Optional[NearestNeighbors] = None
         self._residuals_train: _t.Optional[np.ndarray] = None
         self._n_neighbors_effective: _t.Optional[int] = None
+
+    def _compute_weights(self, distances: np.ndarray) -> np.ndarray:
+        if self.weighting == "inverse_distance":
+            return 1.0 / (distances + self.eps)
+
+        if self.weighting == "exponential":
+            return np.exp(-distances)
+
+        if self.weighting == "gaussian":
+            if self.gaussian_sigma is None:
+                sigma = np.mean(distances, axis=1, keepdims=True)
+                sigma = np.maximum(sigma, self.eps)
+            else:
+                sigma = self.gaussian_sigma
+            return np.exp(-(distances**2) / (2.0 * (sigma**2)))
 
     def fit(
         self,
@@ -63,9 +98,9 @@ class LocalKNNRandomEffectsRegressor:
 
         distances, indices = self._nn.kneighbors(q, return_distance=True)
 
-        weights = 1.0 / (distances + self.eps)
+        weights = self._compute_weights(distances)
         numer = np.sum(weights * self._residuals_train[indices], axis=1)
-        denom = np.sum(weights, axis=1)
+        denom = np.maximum(np.sum(weights, axis=1), self.eps)
         return numer / denom
 
     def predict(self, X, neighbor_features):

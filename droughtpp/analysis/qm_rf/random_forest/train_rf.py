@@ -16,6 +16,7 @@ from .model_rf import (
     analyze_merf_contributions,
     save_merf_diagnostics_plot,
 )
+from .knn_random_effects import LocalKNNRandomEffectsRegressor
 from .features import RFFeatureBuilder
 from ..config_loader import get_qm_rf_global_config
 
@@ -47,10 +48,30 @@ def _build_group_labels(stacked_da: xr.DataArray, years: np.ndarray, group_by: s
     raise ValueError(f"Unsupported mixed group_by value: {group_by}")
 
 
+def _select_knn_feature_frame(
+    X_full: pd.DataFrame,
+    knn_feature_columns: List[str] | None,
+) -> pd.DataFrame:
+    if not knn_feature_columns:
+        return X_full
+
+    requested = [str(col) for col in knn_feature_columns]
+    missing = [col for col in requested if col not in X_full.columns]
+    if missing:
+        available = ", ".join(X_full.columns.astype(str).tolist())
+        raise ValueError(
+            "ml_arguments.knn_feature_columns contains unknown feature(s): "
+            f"{missing}. Available features: [{available}]"
+        )
+
+    return X_full.loc[:, requested]
+
+
 def _build_knn_neighbor_features(
     stacked_da: xr.DataArray,
     X_full: pd.DataFrame,
     group_by: str,
+    knn_feature_columns: List[str] | None = None,
 ) -> np.ndarray | None:
     mode = str(group_by).lower()
     if mode == "knn_spatial":
@@ -60,7 +81,8 @@ def _build_knn_neighbor_features(
         lon = np.asarray(stacked_da.coords["longitude"].values, dtype=float)
         return np.column_stack([lat, lon])
     if mode == "knn_feature":
-        return np.asarray(X_full.values, dtype=float)
+        X_knn = _select_knn_feature_frame(X_full, knn_feature_columns)
+        return np.asarray(X_knn.values, dtype=float)
     return None
 
 
@@ -94,6 +116,49 @@ def plot_training_curve(training_history: dict, out_path: Path):
     plt.close()
 
 
+def _append_train_block(
+    res_da: xr.DataArray,
+    pred_da: xr.DataArray,
+    land_mask: np.ndarray,
+    feature_builder: RFFeatureBuilder,
+    group_by: str,
+    eval_years: List[int],
+    knn_feature_columns: List[str] | None,
+    X_parts: list,
+    y_parts: list,
+    group_parts: list,
+    knn_parts: list,
+):
+    res_da = res_da.where(land_mask)
+    pred_da = pred_da.where(land_mask)
+
+    res_s = RandomForestBiasCorrector._stack_by_samples(res_da)
+    X_full, years = feature_builder.build(pred_da)
+    y_full = pd.Series(res_s.values, name="residual")
+    if str(group_by).lower() in {"knn_spatial", "knn_feature"}:
+        groups_full = np.repeat("knn", len(y_full)).astype(str)
+    else:
+        groups_full = _build_group_labels(res_s, years, group_by)
+    knn_full = _build_knn_neighbor_features(
+        res_s,
+        X_full,
+        group_by,
+        knn_feature_columns=knn_feature_columns,
+    )
+
+    finite_mask = np.isfinite(y_full.values) & np.all(
+        np.isfinite(X_full.values), axis=1
+    )
+    eval_mask_year = np.isin(years, eval_years)
+    train_mask = finite_mask & (~eval_mask_year)
+
+    X_parts.append(X_full.loc[train_mask].reset_index(drop=True))
+    y_parts.append(y_full.loc[train_mask].reset_index(drop=True))
+    group_parts.append(pd.Series(groups_full[train_mask]).reset_index(drop=True))
+    if knn_full is not None:
+        knn_parts.append(np.asarray(knn_full[train_mask], dtype=float))
+
+
 def collect_train_sets(
     residuals_json: Path,
     qm_hindcasts_json: Path,
@@ -102,6 +167,8 @@ def collect_train_sets(
     eval_years: List[int],
     feature_builder: RFFeatureBuilder,
     group_by: str = "grid_id",
+    correction_target: str = "member",
+    knn_feature_columns: List[str] | None = None,
 ):
     """
     Collect training sets from pre-aligned residuals and QM hindcasts.
@@ -116,8 +183,6 @@ def collect_train_sets(
     y_parts = []
     group_parts = []
     knn_parts = []
-
-    RF = RandomForestBiasCorrector
 
     # Build static landmask from reference field (finite values)
     land_mask = (
@@ -138,42 +203,56 @@ def collect_train_sets(
         # Update mask: only keep points that are land in all features
         land_mask = land_mask & arr_mask
 
-    for resid_path, qm_hind_path in zip(residuals, qm_hindcasts):
-        resid_path = str(resid_path)
-        qm_hind_path = str(qm_hind_path)
+    correction_mode = str(correction_target).lower()
+    if correction_mode in {"ensemble_mean", "mean", "ens_mean"}:
+        residual_members = []
+        predictor_members = []
+        for resid_path, qm_hind_path in zip(residuals, qm_hindcasts):
+            with xr.open_dataset(str(resid_path)) as ds_res, xr.open_dataset(
+                str(qm_hind_path)
+            ) as ds_qm:
+                residual_members.append(ds_res[var_name].load())
+                predictor_members.append(ds_qm[var_name].load())
 
-        res_da = xr.open_dataset(resid_path)[var_name]
-        pred_da = xr.open_dataset(qm_hind_path)[var_name]
-
-        res_da = res_da.where(land_mask)
-        pred_da = pred_da.where(land_mask)
-
-        res_s = RF._stack_by_samples(res_da)
-        X_full, years = feature_builder.build(pred_da)
-        y_full = pd.Series(res_s.values, name="residual")
-        if str(group_by).lower() in {"knn_spatial", "knn_feature"}:
-            groups_full = np.repeat("knn", len(y_full)).astype(str)
-        else:
-            groups_full = _build_group_labels(res_s, years, group_by)
-        knn_full = _build_knn_neighbor_features(res_s, X_full, group_by)
-
-        finite_mask = np.isfinite(y_full.values) & np.all(
-            np.isfinite(X_full.values), axis=1
+        res_da = xr.concat(residual_members, dim="member").mean("member", skipna=True)
+        pred_da = xr.concat(predictor_members, dim="member").mean("member", skipna=True)
+        _append_train_block(
+            res_da,
+            pred_da,
+            land_mask,
+            feature_builder,
+            group_by,
+            eval_years,
+            knn_feature_columns,
+            X_parts,
+            y_parts,
+            group_parts,
+            knn_parts,
         )
+    else:
+        for resid_path, qm_hind_path in zip(residuals, qm_hindcasts):
+            resid_path = str(resid_path)
+            qm_hind_path = str(qm_hind_path)
 
-        # keep only training samples (exclude eval_years)
-        if years is not None and len(eval_years) > 0:
-            eval_mask_year = np.isin(years, eval_years)
-        else:
-            eval_mask_year = np.zeros_like(finite_mask, dtype=bool)
+            with xr.open_dataset(resid_path) as ds_res, xr.open_dataset(
+                qm_hind_path
+            ) as ds_qm:
+                res_da = ds_res[var_name].load()
+                pred_da = ds_qm[var_name].load()
 
-        train_mask = finite_mask & (~eval_mask_year)
-
-        X_parts.append(X_full.loc[train_mask].reset_index(drop=True))
-        y_parts.append(y_full.loc[train_mask].reset_index(drop=True))
-        group_parts.append(pd.Series(groups_full[train_mask]).reset_index(drop=True))
-        if knn_full is not None:
-            knn_parts.append(np.asarray(knn_full[train_mask], dtype=float))
+            _append_train_block(
+                res_da,
+                pred_da,
+                land_mask,
+                feature_builder,
+                group_by,
+                eval_years,
+                knn_feature_columns,
+                X_parts,
+                y_parts,
+                group_parts,
+                knn_parts,
+            )
 
     X = pd.concat(X_parts, ignore_index=True)
     y = pd.concat(y_parts, ignore_index=True)
@@ -206,6 +285,8 @@ def collect_train_sets_all_leadmonths(
     leadmonths: List[int],
     feature_builder: RFFeatureBuilder,
     group_by: str = "grid_id",
+    correction_target: str = "member",
+    knn_feature_columns: List[str] | None = None,
 ):
     X_parts = []
     y_parts = []
@@ -222,6 +303,8 @@ def collect_train_sets_all_leadmonths(
             cfg["leave_out_years"],
             feature_builder,
             group_by=group_by,
+            correction_target=correction_target,
+            knn_feature_columns=knn_feature_columns,
         )
         if len(y_train) > 0:
             X_parts.append(X_train)
@@ -345,15 +428,23 @@ def train_and_save_model(
         knn_k=cfg["ml_arguments"].get("knn_k", 15),
         knn_metric=cfg["ml_arguments"].get("knn_metric", "euclidean"),
         knn_eps=cfg["ml_arguments"].get("knn_eps", 1e-8),
+        knn_weighting=cfg["ml_arguments"].get("knn_weighting", "inverse_distance"),
+        knn_gaussian_sigma=cfg["ml_arguments"].get("knn_gaussian_sigma", None),
+        merf_n_iter=cfg["ml_arguments"].get("merf_n_iter", 1),
+        merf_tol=cfg["ml_arguments"].get("merf_tol", 1e-6),
     )
 
-    # Print MERF diagnostic if this is a mixed model
-    if is_mixed and isinstance(model, MixedEffectsTreeRegressor):
-        # For diagnostics, use training set (no validation data since we're analyzing the fit on X_fit)
+    # Print mixed-model diagnostics for MERF and KNN mixed variants.
+    if is_mixed and isinstance(
+        model, (MixedEffectsTreeRegressor, LocalKNNRandomEffectsRegressor)
+    ):
+        diag_groups = (
+            knn_fit if isinstance(model, LocalKNNRandomEffectsRegressor) else groups_fit
+        )
         diagnostics = analyze_merf_contributions(
             model,
             X_fit.values,
-            groups_fit,
+            diag_groups,
             y_fit.values,
         )
 
@@ -372,6 +463,24 @@ def train_and_save_model(
             / f"{cfg['model_name']}_merf_diagnostics.png"
         )
         save_merf_diagnostics_plot(diagnostics, diag_plot_path)
+
+        # Save one diagnostics table per MERF iteration, if available.
+        iteration_diagnostics = (
+            rf.training_history.get("merf_iteration_diagnostics", [])
+            if isinstance(rf.training_history, dict)
+            else []
+        )
+        for iter_diag in iteration_diagnostics:
+            iter_idx = int(iter_diag.get("iteration", 0))
+            iter_plot_path = (
+                Path(cfg["plot_dir"])
+                / var_name
+                / "rf_train"
+                / rf_results_tag_lm
+                / leadmonth_dir
+                / f"{cfg['model_name']}_merf_diagnostics_iter{iter_idx:02d}.png"
+            )
+            save_merf_diagnostics_plot(iter_diag, iter_plot_path)
 
     curve_path = (
         Path(cfg["plot_dir"])
@@ -413,6 +522,8 @@ def train(config_path: Path | None = None, config_overrides=None):
     )
     leadmonths = cfg["leadmonth"]
     mixed_group_by = cfg.get("ml_arguments", {}).get("mixed_group_by", "grid_id")
+    correction_target = cfg.get("ml_arguments", {}).get("correction_target", "member")
+    knn_feature_columns = cfg.get("ml_arguments", {}).get("knn_feature_columns")
     train_leadmonth_specific = bool(
         cfg.get("ml_arguments", {}).get("train_leadmonth_specific", True)
     )
@@ -424,6 +535,8 @@ def train(config_path: Path | None = None, config_overrides=None):
                 leadmonths=leadmonths,
                 feature_builder=feature_builder,
                 group_by=mixed_group_by,
+                correction_target=correction_target,
+                knn_feature_columns=knn_feature_columns,
             )
         )
 
@@ -467,6 +580,8 @@ def train(config_path: Path | None = None, config_overrides=None):
             cfg["leave_out_years"],
             feature_builder,
             group_by=mixed_group_by,
+            correction_target=correction_target,
+            knn_feature_columns=knn_feature_columns,
         )
 
         feature_count = int(X_train.shape[1])

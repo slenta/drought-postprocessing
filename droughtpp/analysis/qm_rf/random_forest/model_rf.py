@@ -278,6 +278,10 @@ class RandomForestBiasCorrector:
         knn_k: int = 15,
         knn_metric: str = "euclidean",
         knn_eps: float = 1e-8,
+        knn_weighting: str = "inverse_distance",
+        knn_gaussian_sigma: _t.Optional[float] = None,
+        merf_n_iter: int = 1,
+        merf_tol: float = 1e-6,
     ) -> _t.Union[
         RandomForestRegressor,
         XGBRegressor,
@@ -305,67 +309,189 @@ class RandomForestBiasCorrector:
             return model
 
         if model_type in {"mixed_rf", "mixed"}:
-            if groups is None:
-                raise ValueError("groups are required for mixed_rf training")
 
             mixed_base = str(mixed_base_model).lower()
-            if mixed_base in {"xgb", "xgboost"}:
-                base_model = self._train_xgboost(
-                    X,
-                    y,
-                    X_val,
-                    y_val,
-                    n_estimators,
-                    random_state,
-                    xgb_learning_rate,
-                    xgb_max_depth,
-                    xgb_subsample,
-                    xgb_colsample_bytree,
-                    xgb_min_child_weight,
-                    xgb_eval_metric,
-                )
-            else:
-                base_model = self._train_rf(
-                    X,
-                    y,
-                    X_val,
-                    y_val,
-                    n_estimators,
-                    chunk_size,
-                    random_state,
-                    rf_max_depth,
-                    rf_min_samples_leaf,
-                    rf_max_features,
-                )
 
             group_mode = str(mixed_group_by).lower()
             if group_mode in {"knn_spatial", "knn_feature"}:
+                n_iter = max(1, int(merf_n_iter))
+                tol = float(merf_tol)
+                random_effects = np.zeros(len(y), dtype=float)
                 knn_mode = "spatial" if group_mode == "knn_spatial" else "feature"
-                knn_model = LocalKNNRandomEffectsRegressor(
-                    base_model=base_model,
-                    mode=knn_mode,
-                    k=knn_k,
-                    metric=knn_metric,
-                    eps=knn_eps,
-                )
-                knn_model.fit(
-                    X_train=X.values,
-                    y_train=y.values,
-                    neighbor_features_train=np.asarray(knn_neighbor_features),
-                )
+                n_iter_done = 0
+                knn_features_arr = np.asarray(knn_neighbor_features)
+                iteration_diagnostics = []
+
+                for _ in range(n_iter):
+                    n_iter_done += 1
+                    y_adjusted = pd.Series(
+                        y.values - random_effects,
+                        index=y.index,
+                        name=y.name,
+                    )
+
+                    if mixed_base in {"xgb", "xgboost"}:
+                        base_model = self._train_xgboost(
+                            X,
+                            y_adjusted,
+                            X_val,
+                            y_val,
+                            n_estimators,
+                            random_state,
+                            xgb_learning_rate,
+                            xgb_max_depth,
+                            xgb_subsample,
+                            xgb_colsample_bytree,
+                            xgb_min_child_weight,
+                            xgb_eval_metric,
+                        )
+                    else:
+                        base_model = self._train_rf(
+                            X,
+                            y_adjusted,
+                            X_val,
+                            y_val,
+                            n_estimators,
+                            chunk_size,
+                            random_state,
+                            rf_max_depth,
+                            rf_min_samples_leaf,
+                            rf_max_features,
+                        )
+
+                    knn_model = LocalKNNRandomEffectsRegressor(
+                        base_model=base_model,
+                        mode=knn_mode,
+                        k=knn_k,
+                        metric=knn_metric,
+                        eps=knn_eps,
+                        weighting=knn_weighting,
+                        gaussian_sigma=knn_gaussian_sigma,
+                    )
+                    knn_model.fit(
+                        X_train=X.values,
+                        y_train=y.values,
+                        neighbor_features_train=knn_features_arr,
+                    )
+
+                    _, updated_random_effects, _ = knn_model.predict_components(
+                        X.values,
+                        knn_features_arr,
+                    )
+                    iter_diag = analyze_merf_contributions(
+                        knn_model,
+                        X.values,
+                        knn_features_arr,
+                        y.values,
+                    )
+                    if iter_diag is not None:
+                        iter_diag["iteration"] = n_iter_done
+                        iter_diag.pop("base_predictions", None)
+                        iter_diag.pop("group_effects_predictions", None)
+                        iter_diag.pop("combined_predictions", None)
+                        iteration_diagnostics.append(iter_diag)
+
+                    max_delta = (
+                        float(np.max(np.abs(updated_random_effects - random_effects)))
+                        if len(updated_random_effects) > 0
+                        else 0.0
+                    )
+                    random_effects = updated_random_effects
+                    if max_delta <= tol:
+                        break
+
                 self.training_history["model_type"] = f"mixed_knn[{mixed_base}]"
+                self.training_history["merf_n_iter"] = n_iter_done
+                self.training_history["merf_tol"] = tol
+                self.training_history["merf_iteration_diagnostics"] = (
+                    iteration_diagnostics
+                )
                 self.model = knn_model
                 return knn_model
 
             groups_arr = np.asarray(groups).astype(str)
-            fixed_preds = base_model.predict(X.values)
-            residuals = y.values - fixed_preds
+            n_iter = max(1, int(merf_n_iter))
+            tol = float(merf_tol)
+            random_effects = np.zeros(len(y), dtype=float)
+            group_effects: dict[str, float] = {}
+            n_iter_done = 0
+            iteration_diagnostics = []
 
-            group_effects_series = pd.Series(residuals).groupby(groups_arr).mean()
-            group_effects = {
-                str(group): float(effect)
-                for group, effect in group_effects_series.items()
-            }
+            for _ in range(n_iter):
+                n_iter_done += 1
+                y_adjusted = pd.Series(
+                    y.values - random_effects,
+                    index=y.index,
+                    name=y.name,
+                )
+
+                if mixed_base in {"xgb", "xgboost"}:
+                    base_model = self._train_xgboost(
+                        X,
+                        y_adjusted,
+                        X_val,
+                        y_val,
+                        n_estimators,
+                        random_state,
+                        xgb_learning_rate,
+                        xgb_max_depth,
+                        xgb_subsample,
+                        xgb_colsample_bytree,
+                        xgb_min_child_weight,
+                        xgb_eval_metric,
+                    )
+                else:
+                    base_model = self._train_rf(
+                        X,
+                        y_adjusted,
+                        X_val,
+                        y_val,
+                        n_estimators,
+                        chunk_size,
+                        random_state,
+                        rf_max_depth,
+                        rf_min_samples_leaf,
+                        rf_max_features,
+                    )
+
+                fixed_preds = base_model.predict(X.values)
+                residuals = y.values - fixed_preds
+                group_effects_series = pd.Series(residuals).groupby(groups_arr).mean()
+                group_effects = {
+                    str(group): float(effect)
+                    for group, effect in group_effects_series.items()
+                }
+
+                updated_random_effects = np.array(
+                    [group_effects.get(g, 0.0) for g in groups_arr],
+                    dtype=float,
+                )
+                iter_model = MixedEffectsTreeRegressor(
+                    base_model=base_model,
+                    group_effects=group_effects,
+                    group_by=mixed_group_by,
+                )
+                iter_diag = analyze_merf_contributions(
+                    iter_model,
+                    X.values,
+                    groups_arr,
+                    y.values,
+                )
+                if iter_diag is not None:
+                    iter_diag["iteration"] = n_iter_done
+                    iter_diag.pop("base_predictions", None)
+                    iter_diag.pop("group_effects_predictions", None)
+                    iter_diag.pop("combined_predictions", None)
+                    iteration_diagnostics.append(iter_diag)
+
+                max_delta = (
+                    float(np.max(np.abs(updated_random_effects - random_effects)))
+                    if len(updated_random_effects) > 0
+                    else 0.0
+                )
+                random_effects = updated_random_effects
+                if max_delta <= tol:
+                    break
 
             mixed_model = MixedEffectsTreeRegressor(
                 base_model=base_model,
@@ -373,6 +499,9 @@ class RandomForestBiasCorrector:
                 group_by=mixed_group_by,
             )
             self.training_history["model_type"] = f"mixed_rf[{mixed_base}]"
+            self.training_history["merf_n_iter"] = n_iter_done
+            self.training_history["merf_tol"] = tol
+            self.training_history["merf_iteration_diagnostics"] = iteration_diagnostics
             self.model = mixed_model
             return mixed_model
 
@@ -448,7 +577,11 @@ class RandomForestBiasCorrector:
 
 
 def analyze_merf_contributions(
-    model: _t.Union[MixedEffectsTreeRegressor, XGBRegressor],
+    model: _t.Union[
+        MixedEffectsTreeRegressor,
+        LocalKNNRandomEffectsRegressor,
+        XGBRegressor,
+    ],
     X: np.ndarray,
     groups: np.ndarray,
     y_true: _t.Optional[np.ndarray] = None,
@@ -466,15 +599,24 @@ def analyze_merf_contributions(
     Returns:
         dict with keys: group_effects_df, base_stats, random_stats, summary_table, plots (optional)
     """
-    if not isinstance(model, MixedEffectsTreeRegressor):
+    if not isinstance(
+        model, (MixedEffectsTreeRegressor, LocalKNNRandomEffectsRegressor)
+    ):
         print("Model is not a MERF; skipping component analysis.")
         return None
 
     # Get component predictions
     fixed, re, combined = model.predict_components(X, groups)
 
-    # Group effects DataFrame
-    group_effects_df = model.get_group_effects_df()
+    # MixedEffectsTreeRegressor has explicit group effects, KNN mixed does not.
+    if isinstance(model, MixedEffectsTreeRegressor):
+        group_effects_df = model.get_group_effects_df()
+        group_effects = model.group_effects
+        n_groups = len(model.group_effects)
+    else:
+        group_effects_df = pd.DataFrame(columns=["group", "effect"])
+        group_effects = {}
+        n_groups = int(getattr(model, "_n_neighbors_effective", 0) or 0)
 
     # Statistics on fixed term
     base_stats = {
@@ -487,7 +629,7 @@ def analyze_merf_contributions(
 
     # Statistics on random effects
     random_stats = {
-        "n_groups": len(model.group_effects),
+        "n_groups": n_groups,
         "mean": float(np.nanmean(re)),
         "std": float(np.nanstd(re)),
         "min": float(np.nanmin(re)),
@@ -503,7 +645,7 @@ def analyze_merf_contributions(
     contribution_ratio = abs_re / (abs_fixed + abs_re + eps)
 
     results = {
-        "group_effects": model.group_effects,
+        "group_effects": group_effects,
         "group_effects_df": group_effects_df,
         "base_stats": base_stats,
         "random_stats": random_stats,
