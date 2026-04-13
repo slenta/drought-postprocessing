@@ -8,6 +8,18 @@ leadtime_tag: "lm1-6"
 residuals_json: "${output_dir}/data/paths/qm_residuals_paths.json"
 
 preprocessing_target: "cwb"
+
+# training_target: "residual" keeps residual regression workflow.
+# training_target: "event_p90" trains a binary event model with
+#   y = 1(obs_cwb > P90_obs),
+#   features include predictor + qm_event_p90 where qm_event_p90 = 1(qm_cwb > P90_qm).
+training_target: "event_p90"
+event_model:
+  predictor_var: "CWB"
+  reference_data: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf/data/preprocessing/reference_cwb/reference_cwb_000.nc"
+  percentile: 90.0
+  probability_threshold: 0.5
+
 preprocessing_options:
   cwb:
     hindcasts_json: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf/paths/preprocessing/hindcast_cwb_month_window_paths_06-11.json"
@@ -56,6 +68,7 @@ workflow:
   run_qm_eval: false 
   run_rf_train: true 
   run_rf_evaluate: true 
+  evaluate_event_probability: true
   evaluate_cwb: true 
   evaluate_spei: false 
 
@@ -67,25 +80,39 @@ leadmonth: [1, 2, 3, 4, 5, 6]
 
 ml_arguments:
   train_leadmonth_specific: true 
-  n_estimators: 700
+  n_estimators: 500
   random_state: 0
   chunk_size: 30
   model_type: "mixed_rf" # one of "rf", "xgboost", "mixed_rf"
   mixed_base_model: "xgboost" # for mixed_rf: "rf" or "xgboost"
-  mixed_group_by: "knn_feature" # one of "grid_id", "year", "grid_year", "calendar_month", "knn_spatial", "knn_feature"
+  mixed_group_by: "knn_feature" # one of "grid_id", "year", "grid_year", "calendar_month", "knn_spatial", "knn_feature", "predictor_quantile"
+  # Used only when mixed_group_by == "predictor_quantile"
+  quantile_group_predictor: "predictor"
+  quantile_group_n: 10
   # Optional: restrict knn_feature distance space to a subset of feature columns.
   knn_feature_columns: ["predictor", "obs_prev_1", "lat", "lon"]
-  correction_target: "ensemble_mean" # one of "member", "ensemble_mean"
+  correction_target: "member" # one of "member", "ensemble_mean"
   spread_reconstruction: "preserve_qm" # one of "preserve_qm", "baseline_std"
-  knn_k: 50
+  split_years:
+    # test defaults to leave_out_years when omitted
+    # train omitted means all non-val/non-test years
+    val: [2005, 2006]
+    test: [1990, 1991, 1992, 1993, 1994]
+  re_shrinkage_grid: [0.0, 0.25, 0.5, 0.75, 1.0]
+  tune_knn_k_values: [10, 20, 50, 100, 200]
+  tune_knn_eps_values: [1.0e-08, 1.0e-06]
+  xgb_early_stopping_rounds: 50
+  rf_early_stopping_patience: 5
+  rf_early_stopping_min_delta: 0.0001
+  knn_k: 100
   knn_metric: "euclidean"
   knn_eps: 1.0e-08
   knn_weighting: "exponential" # one of "inverse_distance", "exponential", "gaussian"
   knn_gaussian_sigma: null # if null, sigma is estimated from neighbor distances
   merf_n_iter: 1 # iterative mixed effects for non-KNN mixed mode
   # merf_tol: 1.0e-06
-  xgb_learning_rate: 0.3
-  xgb_max_depth: 8
+  xgb_learning_rate: 0.05
+  xgb_max_depth: 4
   # xgb_eval_metric: "rmse"
 
 qm_arguments:

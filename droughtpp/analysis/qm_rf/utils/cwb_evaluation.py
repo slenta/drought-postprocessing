@@ -1,13 +1,16 @@
 import numpy as np
 import xarray as xr
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 from droughtpp.analysis.qm_rf.utils.visualization import (
     plot_drought_hit_rate_maps,
+    plot_event_bss_comparison_maps,
     plot_extreme_drought_hit_histogram,
     plot_residual_comparison_maps,
 )
 from droughtpp.analysis.qm_rf.utils.evaluation import (
+    brier_skill_score_between_ensembles_threshold,
     compute_gridcell_drought_hit_rate_percent,
     count_extreme_drought_events,
     load_paths_from_json,
@@ -16,6 +19,38 @@ from droughtpp.analysis.qm_rf.utils.evaluation import (
     prepare_pairwise_skill_evaluation,
     plot_pairwise_skill_evaluation,
 )
+
+
+def _plot_accumulated_event_timeseries(
+    reference_counts_per_timestep,
+    system_counts_per_timestep,
+    out_dir: Path,
+    threshold_label: str,
+    file_prefix: str = "accumulated_event_timeseries",
+):
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    ref_series = np.asarray(reference_counts_per_timestep, dtype=float)
+    ref_cumsum = np.nancumsum(ref_series)
+
+    fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+    ax.plot(ref_cumsum, color="black", linewidth=2.0, label="Reference")
+
+    for label, series in system_counts_per_timestep:
+        csum = np.nancumsum(np.asarray(series, dtype=float))
+        ax.plot(csum, linewidth=1.8, label=label)
+
+    ax.set_xlabel("Evaluation timestep")
+    ax.set_ylabel("Accumulated event count")
+    ax.set_title(f"Accumulated Events ({threshold_label})")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+
+    plt.tight_layout()
+    out_png = out_dir / f"{file_prefix}.png"
+    plt.savefig(str(out_png), bbox_inches="tight", dpi=150)
+    plt.close()
+    return str(out_png)
 
 
 def evaluate_cwb(
@@ -234,3 +269,237 @@ def evaluate_cwb(
                 file_prefix="residual_qm_vs_ml",
                 land_mask_path=land_mask_path,
             )
+
+
+def evaluate_cwb_events(
+    ml_event_probability_json: Path,
+    hindcasts_json: Path,
+    reference_data: Path,
+    out_dir: Path,
+    cwb_var: str = "CWB",
+    eval_years=None,
+    event_percentile: float = 90.0,
+    probability_threshold: float = 0.5,
+    plot_dir: Path | str | None = None,
+    qm_hindcasts_json: Path | None = None,
+    land_mask_path: Path | None = None,
+    ml_event_var: str = "event_probability",
+):
+
+    if eval_years is None:
+        eval_years = []
+
+    ml_event_probability_paths = load_paths_from_json(ml_event_probability_json)
+    hindcast_paths = load_paths_from_json(hindcasts_json)
+    qm_hindcast_paths = (
+        load_paths_from_json(qm_hindcasts_json) if qm_hindcasts_json else None
+    )
+
+    sample_ml_event = load_eval_data(ml_event_probability_paths[0], ml_event_var)
+    eval_month = int(sample_ml_event["time"].dt.month.values[0])
+
+    reference_cwb_all = load_eval_data(Path(reference_data), cwb_var)
+    reference_cwb_all = reference_cwb_all.isel(
+        time=reference_cwb_all["time"].dt.month == eval_month
+    )
+    reference_cwb = select_eval_years(reference_cwb_all, eval_years)
+
+    baseline_members = []
+    qm_members = []
+    ml_event_members = []
+    reference_members = []
+
+    for i, (hindcast_path, ml_event_path) in enumerate(
+        zip(hindcast_paths, ml_event_probability_paths)
+    ):
+        baseline_cwb = load_eval_data(hindcast_path, cwb_var)
+        ml_event_probability = load_eval_data(ml_event_path, ml_event_var)
+
+        baseline_cwb = select_eval_years(baseline_cwb, eval_years)
+        ml_event_probability = select_eval_years(ml_event_probability, eval_years)
+
+        ml_event_probability, baseline_cwb, reference_member = xr.align(
+            ml_event_probability,
+            baseline_cwb,
+            reference_cwb,
+            join="inner",
+        )
+
+        baseline_members.append(baseline_cwb)
+        ml_event_members.append(ml_event_probability)
+        reference_members.append(reference_member)
+
+        if qm_hindcast_paths:
+            qm_cwb = load_eval_data(qm_hindcast_paths[i], cwb_var)
+            qm_cwb = select_eval_years(qm_cwb, eval_years)
+            qm_cwb, _, _, _ = xr.align(
+                qm_cwb,
+                baseline_cwb,
+                ml_event_probability,
+                reference_member,
+                join="inner",
+            )
+            qm_members.append(qm_cwb)
+
+    baseline_ensemble = xr.concat(baseline_members, dim="member").transpose(
+        "time", "member", "latitude", "longitude"
+    )
+    ml_event_probability_ensemble = xr.concat(ml_event_members, dim="member").transpose(
+        "time", "member", "latitude", "longitude"
+    )
+    reference = reference_members[0].transpose("time", "latitude", "longitude")
+    qm_ensemble = (
+        xr.concat(qm_members, dim="member").transpose("time", "member", "latitude", "longitude")
+        if qm_members
+        else None
+    )
+
+    baseline_np = baseline_ensemble.values
+    ml_event_probability_np = np.clip(ml_event_probability_ensemble.values, 0.0, 1.0)
+    reference_np = reference.values
+    qm_np = qm_ensemble.values if qm_ensemble is not None else None
+
+    threshold_upper = np.nanpercentile(reference_np, event_percentile, axis=0)
+    threshold_label = f">P{int(event_percentile)}"
+
+    obs_event = (reference_np > threshold_upper[None, :, :]).astype(float)
+    baseline_prob = np.mean(baseline_np > threshold_upper[None, None, :, :], axis=1)
+    qm_prob = (
+        np.mean(qm_np > threshold_upper[None, None, :, :], axis=1)
+        if qm_np is not None
+        else None
+    )
+    ml_prob = np.nanmean(ml_event_probability_np, axis=1)
+
+    bss_ml_vs_orig, _, _ = brier_skill_score_between_ensembles_threshold(
+        ml_prob[:, None, :, :],
+        baseline_prob[:, None, :, :],
+        obs_event,
+        threshold=probability_threshold,
+        comparison="above",
+    )
+
+    if qm_prob is not None:
+        bss_qm_vs_orig, _, _ = brier_skill_score_between_ensembles_threshold(
+            qm_prob[:, None, :, :],
+            baseline_prob[:, None, :, :],
+            obs_event,
+            threshold=probability_threshold,
+            comparison="above",
+        )
+        bss_ml_vs_qm, _, _ = brier_skill_score_between_ensembles_threshold(
+            ml_prob[:, None, :, :],
+            qm_prob[:, None, :, :],
+            obs_event,
+            threshold=probability_threshold,
+            comparison="above",
+        )
+    else:
+        bss_qm_vs_orig = np.full_like(bss_ml_vs_orig, np.nan, dtype=float)
+        bss_ml_vs_qm = np.full_like(bss_ml_vs_orig, np.nan, dtype=float)
+
+    ml_event_binary = ml_prob >= probability_threshold
+    reference_event_binary = obs_event >= 0.5
+    valid_ml = np.isfinite(ml_prob) & np.isfinite(obs_event)
+
+    ml_hit_count_grid = np.sum(ml_event_binary & reference_event_binary & valid_ml, axis=0)
+    ref_event_count_grid = np.sum(reference_event_binary & valid_ml, axis=0)
+    ml_hit_rate_grid = np.full(ref_event_count_grid.shape, np.nan, dtype=float)
+    has_ref_events = ref_event_count_grid > 0
+    ml_hit_rate_grid[has_ref_events] = (
+        ml_hit_count_grid[has_ref_events] / ref_event_count_grid[has_ref_events]
+    ) * 100.0
+
+    baseline_hit_rate = compute_gridcell_drought_hit_rate_percent(
+        baseline_np,
+        reference_np,
+        threshold_upper,
+        comparison="above",
+    )
+    qm_hit_rate = (
+        compute_gridcell_drought_hit_rate_percent(
+            qm_np,
+            reference_np,
+            threshold_upper,
+            comparison="above",
+        )
+        if qm_np is not None
+        else np.full_like(baseline_hit_rate, np.nan, dtype=float)
+    )
+
+    baseline_counts = count_extreme_drought_events(
+        baseline_np,
+        reference_np,
+        threshold_upper,
+        comparison="above",
+    )
+    qm_counts = (
+        count_extreme_drought_events(
+            qm_np,
+            reference_np,
+            threshold_upper,
+            comparison="above",
+        )
+        if qm_np is not None
+        else None
+    )
+
+    ml_reference_count = int(np.count_nonzero(reference_event_binary & valid_ml))
+    ml_hit_count = int(np.count_nonzero(ml_event_binary & reference_event_binary & valid_ml))
+    ml_wrong_count = int(np.count_nonzero(ml_event_binary & (~reference_event_binary) & valid_ml))
+
+    reference_counts_t = np.sum(reference_event_binary & np.isfinite(reference_np), axis=(1, 2))
+    baseline_counts_t = np.sum(
+        (baseline_np > threshold_upper[None, None, :, :]) & np.isfinite(baseline_np),
+        axis=(1, 2, 3),
+    )
+    ml_counts_t = np.sum(ml_event_binary & valid_ml, axis=(1, 2))
+    system_series = [("Original", baseline_counts_t), ("ML", ml_counts_t)]
+    if qm_np is not None:
+        qm_counts_t = np.sum(
+            (qm_np > threshold_upper[None, None, :, :]) & np.isfinite(qm_np),
+            axis=(1, 2, 3),
+        )
+        system_series.insert(1, ("QM", qm_counts_t))
+
+    if plot_dir is not None:
+        plot_dir = Path(plot_dir)
+
+        plot_event_bss_comparison_maps(
+            bss_qm_vs_orig,
+            bss_ml_vs_orig,
+            bss_ml_vs_qm,
+            out_dir=str(plot_dir),
+            threshold_label=threshold_label,
+            file_prefix="event_bss_comparison",
+            land_mask_path=land_mask_path,
+        )
+
+        plot_drought_hit_rate_maps(
+            baseline_hit_rate,
+            qm_hit_rate,
+            ml_hit_rate_grid,
+            out_dir=str(plot_dir),
+            lower_threshold_label=threshold_label,
+            file_prefix=f"event_hit_rate_p{int(event_percentile)}",
+        )
+
+        event_hist_counts = [("Original", *baseline_counts)]
+        if qm_counts is not None:
+            event_hist_counts.append(("QM", *qm_counts))
+        event_hist_counts.append(("ML-event", ml_reference_count, ml_hit_count, ml_wrong_count))
+        plot_extreme_drought_hit_histogram(
+            event_hist_counts,
+            out_dir=str(plot_dir),
+            lower_percentile=event_percentile,
+            threshold_label=threshold_label,
+            file_prefix=f"event_histogram_p{int(event_percentile)}",
+        )
+
+        _plot_accumulated_event_timeseries(
+            reference_counts_t,
+            system_series,
+            out_dir=plot_dir,
+            threshold_label=threshold_label,
+            file_prefix=f"accumulated_events_p{int(event_percentile)}",
+        )

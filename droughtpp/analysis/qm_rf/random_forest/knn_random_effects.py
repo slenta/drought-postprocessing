@@ -21,6 +21,7 @@ class LocalKNNRandomEffectsRegressor:
         eps: float = 1e-8,
         weighting: str = "inverse_distance",
         gaussian_sigma: _t.Optional[float] = None,
+        random_effect_shrinkage: float = 1.0,
     ):
         mode = str(mode).lower()
         weighting_norm = str(weighting).lower()
@@ -47,6 +48,7 @@ class LocalKNNRandomEffectsRegressor:
         self.gaussian_sigma = (
             None if gaussian_sigma is None else max(float(gaussian_sigma), self.eps)
         )
+        self.random_effect_shrinkage = float(random_effect_shrinkage)
 
         self._nn: _t.Optional[NearestNeighbors] = None
         self._residuals_train: _t.Optional[np.ndarray] = None
@@ -106,12 +108,16 @@ class LocalKNNRandomEffectsRegressor:
     def predict(self, X, neighbor_features):
         X_arr = np.asarray(X)
         fixed = np.asarray(self.base_model.predict(X_arr), dtype=float).reshape(-1)
-        random_effect = self._predict_random_effect(neighbor_features)
+        random_effect = (
+            self.random_effect_shrinkage * self._predict_random_effect(neighbor_features)
+        )
         return fixed + random_effect
 
     def predict_components(self, X, neighbor_features):
         X_arr = np.asarray(X)
         fixed = np.asarray(self.base_model.predict(X_arr), dtype=float).reshape(-1)
-        random_effect = self._predict_random_effect(neighbor_features)
+        random_effect = (
+            self.random_effect_shrinkage * self._predict_random_effect(neighbor_features)
+        )
         combined = fixed + random_effect
         return fixed, random_effect, combined

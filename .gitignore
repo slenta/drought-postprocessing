@@ -17,8 +17,12 @@ outputs/*
 eval_results/*
 evaluations/*
 *.pdf
+*.csv
 *.jpg
 *.png
 *.nc
 *.wandb
 *.joblib
+*.json
+*.sh
+*.yaml

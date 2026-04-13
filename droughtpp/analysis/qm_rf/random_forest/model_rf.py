@@ -12,15 +12,24 @@ from .knn_random_effects import LocalKNNRandomEffectsRegressor
 
 
 class MixedEffectsTreeRegressor:
-    def __init__(self, base_model, group_effects: dict[str, float], group_by: str):
+    def __init__(
+        self,
+        base_model,
+        group_effects: dict[str, float],
+        group_by: str,
+        random_effect_shrinkage: float = 1.0,
+    ):
         self.base_model = base_model
         self.group_effects = group_effects
         self.group_by = group_by
+        self.random_effect_shrinkage = float(random_effect_shrinkage)
 
     def predict(self, X, groups):
         groups_arr = np.asarray(groups).astype(str)
         fixed = self.base_model.predict(X)
-        re = np.array([self.group_effects.get(g, 0.0) for g in groups_arr], dtype=float)
+        re = self.random_effect_shrinkage * np.array(
+            [self.group_effects.get(g, 0.0) for g in groups_arr], dtype=float
+        )
         return fixed + re
 
     def predict_components(self, X, groups):
@@ -30,7 +39,9 @@ class MixedEffectsTreeRegressor:
         """
         groups_arr = np.asarray(groups).astype(str)
         fixed = self.base_model.predict(X)
-        re = np.array([self.group_effects.get(g, 0.0) for g in groups_arr], dtype=float)
+        re = self.random_effect_shrinkage * np.array(
+            [self.group_effects.get(g, 0.0) for g in groups_arr], dtype=float
+        )
         combined = fixed + re
         return fixed, re, combined
 
@@ -66,6 +77,10 @@ class RandomForestBiasCorrector:
         ] = None
         self.training_history: _t.Optional[dict] = None
 
+    @staticmethod
+    def _rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        return float(np.sqrt(np.mean((y_pred - y_true) ** 2)))
+
     def _train_xgboost(
         self,
         X: pd.DataFrame,
@@ -80,19 +95,31 @@ class RandomForestBiasCorrector:
         xgb_colsample_bytree: float,
         xgb_min_child_weight: float,
         xgb_eval_metric: str,
+        xgb_early_stopping_rounds: _t.Optional[int] = None,
     ) -> XGBRegressor:
-        xgb = XGBRegressor(
-            n_estimators=n_estimators,
-            random_state=random_state,
-            learning_rate=xgb_learning_rate,
-            max_depth=xgb_max_depth,
-            subsample=xgb_subsample,
-            colsample_bytree=xgb_colsample_bytree,
-            min_child_weight=xgb_min_child_weight,
-            eval_metric=xgb_eval_metric,
-            objective="reg:squarederror",
-            n_jobs=-1,
+        use_early_stopping = (
+            xgb_early_stopping_rounds is not None
+            and int(xgb_early_stopping_rounds) > 0
+            and X_val is not None
+            and y_val is not None
         )
+
+        xgb_kwargs = {
+            "n_estimators": n_estimators,
+            "random_state": random_state,
+            "learning_rate": xgb_learning_rate,
+            "max_depth": xgb_max_depth,
+            "subsample": xgb_subsample,
+            "colsample_bytree": xgb_colsample_bytree,
+            "min_child_weight": xgb_min_child_weight,
+            "eval_metric": xgb_eval_metric,
+            "objective": "reg:squarederror",
+            "n_jobs": -1,
+        }
+        if use_early_stopping:
+            xgb_kwargs["early_stopping_rounds"] = int(xgb_early_stopping_rounds)
+
+        xgb = XGBRegressor(**xgb_kwargs)
         if X_val is not None and y_val is not None:
             eval_set = [(X.values, y.values), (X_val.values, y_val.values)]
         else:
@@ -132,6 +159,8 @@ class RandomForestBiasCorrector:
         rf_max_depth: _t.Optional[int],
         rf_min_samples_leaf: int,
         rf_max_features: _t.Union[str, int, float, None],
+        rf_early_stopping_patience: int = 0,
+        rf_early_stopping_min_delta: float = 0.0,
     ) -> RandomForestRegressor:
         start = time.time()
         total_done = 0
@@ -151,10 +180,13 @@ class RandomForestBiasCorrector:
 
         train_rmse = [float(np.sqrt(np.mean((rf.predict(X.values) - y.values) ** 2)))]
         val_rmse = []
+        best_val_rmse = np.inf
+        best_n_estimators = total_done
+        no_improve = 0
         if X_val is not None and y_val is not None:
-            val_rmse.append(
-                float(np.sqrt(np.mean((rf.predict(X_val.values) - y_val.values) ** 2)))
-            )
+            first_val = self._rmse(y_val.values, rf.predict(X_val.values))
+            val_rmse.append(first_val)
+            best_val_rmse = first_val
         trees_hist = [total_done]
 
         pbar = tqdm(total=n_estimators, desc="RF training", unit="trees")
@@ -179,17 +211,49 @@ class RandomForestBiasCorrector:
             )
 
             trees_hist.append(total_done)
-            train_rmse.append(
-                float(np.sqrt(np.mean((rf.predict(X.values) - y.values) ** 2)))
-            )
+            train_rmse.append(self._rmse(y.values, rf.predict(X.values)))
             if X_val is not None and y_val is not None:
-                val_rmse.append(
-                    float(
-                        np.sqrt(np.mean((rf.predict(X_val.values) - y_val.values) ** 2))
-                    )
+                current_val = self._rmse(y_val.values, rf.predict(X_val.values))
+                val_rmse.append(current_val)
+
+                improved = (best_val_rmse - current_val) > float(
+                    rf_early_stopping_min_delta
                 )
+                if improved:
+                    best_val_rmse = current_val
+                    best_n_estimators = total_done
+                    no_improve = 0
+                else:
+                    no_improve += 1
+
+                if int(rf_early_stopping_patience) > 0 and no_improve >= int(
+                    rf_early_stopping_patience
+                ):
+                    break
 
         pbar.close()
+
+        if (
+            X_val is not None
+            and y_val is not None
+            and int(rf_early_stopping_patience) > 0
+            and best_n_estimators < total_done
+        ):
+            rf = RandomForestRegressor(
+                n_estimators=best_n_estimators,
+                n_jobs=-1,
+                random_state=random_state,
+                max_depth=rf_max_depth,
+                min_samples_leaf=rf_min_samples_leaf,
+                max_features=rf_max_features,
+            )
+            rf.fit(X.values, y.values)
+
+            cutoff = max(1, len([n for n in trees_hist if n <= best_n_estimators]))
+            trees_hist = trees_hist[:cutoff]
+            train_rmse = train_rmse[:cutoff]
+            val_rmse = val_rmse[:cutoff]
+
         self.training_history = {
             "model_type": "rf",
             "metric": "rmse",
@@ -259,6 +323,7 @@ class RandomForestBiasCorrector:
         X_val: _t.Optional[pd.DataFrame] = None,
         y_val: _t.Optional[pd.Series] = None,
         groups: _t.Optional[_t.Sequence[_t.Any]] = None,
+        groups_val: _t.Optional[_t.Sequence[_t.Any]] = None,
         model_type: str = "rf",
         mixed_base_model: str = "rf",
         mixed_group_by: str = "grid_id",
@@ -275,13 +340,20 @@ class RandomForestBiasCorrector:
         rf_min_samples_leaf: int = 1,
         rf_max_features: _t.Union[str, int, float, None] = "sqrt",
         knn_neighbor_features: _t.Optional[np.ndarray] = None,
+        knn_neighbor_features_val: _t.Optional[np.ndarray] = None,
         knn_k: int = 15,
         knn_metric: str = "euclidean",
         knn_eps: float = 1e-8,
         knn_weighting: str = "inverse_distance",
         knn_gaussian_sigma: _t.Optional[float] = None,
+        re_shrinkage_grid: _t.Optional[_t.Sequence[float]] = None,
+        tune_knn_k_values: _t.Optional[_t.Sequence[int]] = None,
+        tune_knn_eps_values: _t.Optional[_t.Sequence[float]] = None,
         merf_n_iter: int = 1,
         merf_tol: float = 1e-6,
+        xgb_early_stopping_rounds: _t.Optional[int] = None,
+        rf_early_stopping_patience: int = 0,
+        rf_early_stopping_min_delta: float = 0.0,
     ) -> _t.Union[
         RandomForestRegressor,
         XGBRegressor,
@@ -304,6 +376,7 @@ class RandomForestBiasCorrector:
                 xgb_colsample_bytree,
                 xgb_min_child_weight,
                 xgb_eval_metric,
+                xgb_early_stopping_rounds,
             )
             self.model = model
             return model
@@ -311,6 +384,11 @@ class RandomForestBiasCorrector:
         if model_type in {"mixed_rf", "mixed"}:
 
             mixed_base = str(mixed_base_model).lower()
+            shrinkage_candidates = (
+                [float(v) for v in re_shrinkage_grid]
+                if re_shrinkage_grid is not None and len(re_shrinkage_grid) > 0
+                else [1.0]
+            )
 
             group_mode = str(mixed_group_by).lower()
             if group_mode in {"knn_spatial", "knn_feature"}:
@@ -320,7 +398,27 @@ class RandomForestBiasCorrector:
                 knn_mode = "spatial" if group_mode == "knn_spatial" else "feature"
                 n_iter_done = 0
                 knn_features_arr = np.asarray(knn_neighbor_features)
+                knn_features_val_arr = (
+                    np.asarray(knn_neighbor_features_val)
+                    if knn_neighbor_features_val is not None
+                    else None
+                )
+                k_candidates = (
+                    [int(v) for v in tune_knn_k_values]
+                    if tune_knn_k_values is not None and len(tune_knn_k_values) > 0
+                    else [int(knn_k)]
+                )
+                eps_candidates = (
+                    [float(v) for v in tune_knn_eps_values]
+                    if tune_knn_eps_values is not None and len(tune_knn_eps_values) > 0
+                    else [float(knn_eps)]
+                )
                 iteration_diagnostics = []
+                best_knn_cfg: dict[str, _t.Any] = {
+                    "k": int(knn_k),
+                    "eps": float(knn_eps),
+                    "shrinkage": float(shrinkage_candidates[0]),
+                }
 
                 for _ in range(n_iter):
                     n_iter_done += 1
@@ -344,6 +442,7 @@ class RandomForestBiasCorrector:
                             xgb_colsample_bytree,
                             xgb_min_child_weight,
                             xgb_eval_metric,
+                            xgb_early_stopping_rounds,
                         )
                     else:
                         base_model = self._train_rf(
@@ -357,22 +456,58 @@ class RandomForestBiasCorrector:
                             rf_max_depth,
                             rf_min_samples_leaf,
                             rf_max_features,
+                            rf_early_stopping_patience,
+                            rf_early_stopping_min_delta,
                         )
 
-                    knn_model = LocalKNNRandomEffectsRegressor(
-                        base_model=base_model,
-                        mode=knn_mode,
-                        k=knn_k,
-                        metric=knn_metric,
-                        eps=knn_eps,
-                        weighting=knn_weighting,
-                        gaussian_sigma=knn_gaussian_sigma,
-                    )
-                    knn_model.fit(
-                        X_train=X.values,
-                        y_train=y.values,
-                        neighbor_features_train=knn_features_arr,
-                    )
+                    best_score = np.inf
+                    best_model = None
+                    for alpha in shrinkage_candidates:
+                        for cand_k in k_candidates:
+                            for cand_eps in eps_candidates:
+                                candidate_model = LocalKNNRandomEffectsRegressor(
+                                    base_model=base_model,
+                                    mode=knn_mode,
+                                    k=int(cand_k),
+                                    metric=knn_metric,
+                                    eps=float(cand_eps),
+                                    weighting=knn_weighting,
+                                    gaussian_sigma=knn_gaussian_sigma,
+                                    random_effect_shrinkage=float(alpha),
+                                )
+                                candidate_model.fit(
+                                    X_train=X.values,
+                                    y_train=y.values,
+                                    neighbor_features_train=knn_features_arr,
+                                )
+
+                                if (
+                                    X_val is not None
+                                    and y_val is not None
+                                    and knn_features_val_arr is not None
+                                ):
+                                    val_pred = candidate_model.predict(
+                                        X_val.values,
+                                        knn_features_val_arr,
+                                    )
+                                    score = self._rmse(y_val.values, val_pred)
+                                else:
+                                    train_pred = candidate_model.predict(
+                                        X.values,
+                                        knn_features_arr,
+                                    )
+                                    score = self._rmse(y.values, train_pred)
+
+                                if score < best_score:
+                                    best_score = score
+                                    best_model = candidate_model
+                                    best_knn_cfg = {
+                                        "k": int(cand_k),
+                                        "eps": float(cand_eps),
+                                        "shrinkage": float(alpha),
+                                    }
+
+                    knn_model = best_model
 
                     _, updated_random_effects, _ = knn_model.predict_components(
                         X.values,
@@ -386,6 +521,12 @@ class RandomForestBiasCorrector:
                     )
                     if iter_diag is not None:
                         iter_diag["iteration"] = n_iter_done
+                        iter_diag["val_rmse"] = float(best_score)
+                        iter_diag["random_effect_shrinkage"] = float(
+                            best_knn_cfg["shrinkage"]
+                        )
+                        iter_diag["knn_k"] = int(best_knn_cfg["k"])
+                        iter_diag["knn_eps"] = float(best_knn_cfg["eps"])
                         iter_diag.pop("base_predictions", None)
                         iter_diag.pop("group_effects_predictions", None)
                         iter_diag.pop("combined_predictions", None)
@@ -403,6 +544,11 @@ class RandomForestBiasCorrector:
                 self.training_history["model_type"] = f"mixed_knn[{mixed_base}]"
                 self.training_history["merf_n_iter"] = n_iter_done
                 self.training_history["merf_tol"] = tol
+                self.training_history["random_effect_shrinkage"] = float(
+                    best_knn_cfg["shrinkage"]
+                )
+                self.training_history["knn_k"] = int(best_knn_cfg["k"])
+                self.training_history["knn_eps"] = float(best_knn_cfg["eps"])
                 self.training_history["merf_iteration_diagnostics"] = (
                     iteration_diagnostics
                 )
@@ -410,10 +556,14 @@ class RandomForestBiasCorrector:
                 return knn_model
 
             groups_arr = np.asarray(groups).astype(str)
+            groups_val_arr = (
+                np.asarray(groups_val).astype(str) if groups_val is not None else None
+            )
             n_iter = max(1, int(merf_n_iter))
             tol = float(merf_tol)
             random_effects = np.zeros(len(y), dtype=float)
             group_effects: dict[str, float] = {}
+            best_shrinkage = float(shrinkage_candidates[0])
             n_iter_done = 0
             iteration_diagnostics = []
 
@@ -439,6 +589,7 @@ class RandomForestBiasCorrector:
                         xgb_colsample_bytree,
                         xgb_min_child_weight,
                         xgb_eval_metric,
+                        xgb_early_stopping_rounds,
                     )
                 else:
                     base_model = self._train_rf(
@@ -452,6 +603,8 @@ class RandomForestBiasCorrector:
                         rf_max_depth,
                         rf_min_samples_leaf,
                         rf_max_features,
+                        rf_early_stopping_patience,
+                        rf_early_stopping_min_delta,
                     )
 
                 fixed_preds = base_model.predict(X.values)
@@ -462,7 +615,35 @@ class RandomForestBiasCorrector:
                     for group, effect in group_effects_series.items()
                 }
 
-                updated_random_effects = np.array(
+                best_score = np.inf
+                for alpha in shrinkage_candidates:
+                    if (
+                        X_val is not None
+                        and y_val is not None
+                        and groups_val_arr is not None
+                    ):
+                        val_re = float(alpha) * np.array(
+                            [group_effects.get(g, 0.0) for g in groups_val_arr],
+                            dtype=float,
+                        )
+                        score = self._rmse(
+                            y_val.values,
+                            base_model.predict(X_val.values) + val_re,
+                        )
+                    else:
+                        train_re = float(alpha) * np.array(
+                            [group_effects.get(g, 0.0) for g in groups_arr],
+                            dtype=float,
+                        )
+                        score = self._rmse(
+                            y.values,
+                            base_model.predict(X.values) + train_re,
+                        )
+                    if score < best_score:
+                        best_score = score
+                        best_shrinkage = float(alpha)
+
+                updated_random_effects = best_shrinkage * np.array(
                     [group_effects.get(g, 0.0) for g in groups_arr],
                     dtype=float,
                 )
@@ -470,6 +651,7 @@ class RandomForestBiasCorrector:
                     base_model=base_model,
                     group_effects=group_effects,
                     group_by=mixed_group_by,
+                    random_effect_shrinkage=best_shrinkage,
                 )
                 iter_diag = analyze_merf_contributions(
                     iter_model,
@@ -479,6 +661,8 @@ class RandomForestBiasCorrector:
                 )
                 if iter_diag is not None:
                     iter_diag["iteration"] = n_iter_done
+                    iter_diag["val_rmse"] = float(best_score)
+                    iter_diag["random_effect_shrinkage"] = float(best_shrinkage)
                     iter_diag.pop("base_predictions", None)
                     iter_diag.pop("group_effects_predictions", None)
                     iter_diag.pop("combined_predictions", None)
@@ -497,10 +681,12 @@ class RandomForestBiasCorrector:
                 base_model=base_model,
                 group_effects=group_effects,
                 group_by=mixed_group_by,
+                random_effect_shrinkage=best_shrinkage,
             )
             self.training_history["model_type"] = f"mixed_rf[{mixed_base}]"
             self.training_history["merf_n_iter"] = n_iter_done
             self.training_history["merf_tol"] = tol
+            self.training_history["random_effect_shrinkage"] = float(best_shrinkage)
             self.training_history["merf_iteration_diagnostics"] = iteration_diagnostics
             self.model = mixed_model
             return mixed_model
@@ -516,6 +702,8 @@ class RandomForestBiasCorrector:
             rf_max_depth,
             rf_min_samples_leaf,
             rf_max_features,
+            rf_early_stopping_patience,
+            rf_early_stopping_min_delta,
         )
         self.model = model
         return model

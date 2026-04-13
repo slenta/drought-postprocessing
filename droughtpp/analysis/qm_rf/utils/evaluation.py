@@ -88,6 +88,22 @@ def select_eval_years(data_array: xr.DataArray, eval_years) -> xr.DataArray:
     return data_array.isel(time=np.isin(years, eval_years))
 
 
+def compute_threshold_grid_from_reference(
+    reference_da: xr.DataArray,
+    eval_years,
+    percentile: float,
+) -> np.ndarray:
+    years = pd.to_datetime(reference_da["time"].values).year
+    train_mask = ~np.isin(years, np.asarray(eval_years, dtype=int))
+
+    if np.any(train_mask):
+        reference_train = reference_da.isel(time=train_mask).values
+    else:
+        reference_train = reference_da.values
+
+    return np.nanpercentile(reference_train, percentile, axis=0)
+
+
 def load_eval_data(path: Path, var_name: str) -> xr.DataArray:
     with xr.open_dataset(path) as ds:
         data_array = ds[var_name].load()
@@ -99,7 +115,12 @@ def load_eval_data(path: Path, var_name: str) -> xr.DataArray:
     return data_array.dropna("time", how="all")
 
 
-def count_extreme_drought_events(ensemble, reference, threshold_lower):
+def count_extreme_drought_events(
+    ensemble,
+    reference,
+    threshold_lower,
+    comparison: str = "below",
+):
     """
     Count reference drought events, correctly hit droughts, and wrong drought predictions.
 
@@ -115,8 +136,12 @@ def count_extreme_drought_events(ensemble, reference, threshold_lower):
     reference = np.asarray(reference)
     threshold_lower = np.asarray(threshold_lower)
 
-    reference_drought = reference < threshold_lower[None, :, :]
-    predicted_drought = ensemble < threshold_lower[None, None, :, :]
+    if comparison == "below":
+        reference_drought = reference < threshold_lower[None, :, :]
+        predicted_drought = ensemble < threshold_lower[None, None, :, :]
+    elif comparison == "above":
+        reference_drought = reference > threshold_lower[None, :, :]
+        predicted_drought = ensemble > threshold_lower[None, None, :, :]
 
     valid = (
         np.isfinite(ensemble)
@@ -136,7 +161,12 @@ def count_extreme_drought_events(ensemble, reference, threshold_lower):
     return reference_count, hit_count, wrong_count
 
 
-def compute_gridcell_drought_hit_rate_percent(ensemble, reference, threshold_lower):
+def compute_gridcell_drought_hit_rate_percent(
+    ensemble,
+    reference,
+    threshold_lower,
+    comparison: str = "below",
+):
     """
     Compute per-gridcell percentage of correctly predicted drought events.
 
@@ -153,8 +183,12 @@ def compute_gridcell_drought_hit_rate_percent(ensemble, reference, threshold_low
     reference = np.asarray(reference)
     threshold_lower = np.asarray(threshold_lower)
 
-    reference_drought = reference < threshold_lower[None, :, :]
-    predicted_drought = ensemble < threshold_lower[None, None, :, :]
+    if comparison == "below":
+        reference_drought = reference < threshold_lower[None, :, :]
+        predicted_drought = ensemble < threshold_lower[None, None, :, :]
+    elif comparison == "above":
+        reference_drought = reference > threshold_lower[None, :, :]
+        predicted_drought = ensemble > threshold_lower[None, None, :, :]
 
     valid = (
         np.isfinite(ensemble)
@@ -226,6 +260,38 @@ def brier_skill_score_between_ensembles_percentile(
         bs_a_lower,
         bs_b_lower,
     )
+
+
+def brier_skill_score_between_ensembles_threshold(
+    ens_a,
+    ens_b,
+    reference,
+    threshold: float = 0.0,
+    comparison: str = "above",
+):
+    ens_a = np.asarray(ens_a)
+    ens_b = np.asarray(ens_b)
+    reference = np.asarray(reference)
+
+    if comparison == "above":
+        obs = (reference > threshold).astype(float)
+        prob_a = np.mean(ens_a > threshold, axis=1)
+        prob_b = np.mean(ens_b > threshold, axis=1)
+    elif comparison == "below":
+        obs = (reference < threshold).astype(float)
+        prob_a = np.mean(ens_a < threshold, axis=1)
+        prob_b = np.mean(ens_b < threshold, axis=1)
+    else:
+        raise ValueError("comparison must be either 'below' or 'above'")
+
+    bs_a = np.nanmean((prob_a - obs) ** 2, axis=0)
+    bs_b = np.nanmean((prob_b - obs) ** 2, axis=0)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        bss = 1.0 - (bs_a / bs_b)
+        bss[np.isclose(bs_b, 0.0)] = np.nan
+
+    return bss, bs_a, bs_b
 
 
 def _infer_lat_lon_names(da):
@@ -383,6 +449,7 @@ def plot_pairwise_skill_evaluation(
     include_example_time_means=False,
     include_difference_examples=False,
     land_mask_path=None,
+    include_bss_maps=True,
 ):
 
     plot_dir = Path(plot_dir)
@@ -427,37 +494,38 @@ def plot_pairwise_skill_evaluation(
         land_mask_path=land_mask_path,
     )
 
-    plot_bss_skill_metrics(
-        skill["bss_upper"],
-        skill["bss_lower"],
-        out_dir=str(plot_dir),
-        upper_threshold_label="mean + 1σ",
-        lower_threshold_label="mean - 1σ",
-        land_mask_path=land_mask_path,
-    )
-
-    plot_bss_skill_metrics(
-        skill["bss_p90_upper"],
-        skill["bss_p10_lower"],
-        out_dir=str(plot_dir),
-        file_prefix="bss_p90_p10",
-        upper_threshold_label="P90",
-        lower_threshold_label="P10",
-        title_prefix="RF-corrected vs Original",
-        land_mask_path=land_mask_path,
-    )
-
-    if skill.get("bss_primary_vs_qm_upper") is not None:
+    if include_bss_maps:
         plot_bss_skill_metrics(
-            skill["bss_primary_vs_qm_upper"],
-            skill["bss_primary_vs_qm_lower"],
+            skill["bss_upper"],
+            skill["bss_lower"],
             out_dir=str(plot_dir),
-            file_prefix="bss_rf_vs_qm",
             upper_threshold_label="mean + 1σ",
             lower_threshold_label="mean - 1σ",
-            title_prefix="RF vs QM",
             land_mask_path=land_mask_path,
         )
+
+        plot_bss_skill_metrics(
+            skill["bss_p90_upper"],
+            skill["bss_p10_lower"],
+            out_dir=str(plot_dir),
+            file_prefix="bss_p90_p10",
+            upper_threshold_label="P90",
+            lower_threshold_label="P10",
+            title_prefix="RF-corrected vs Original",
+            land_mask_path=land_mask_path,
+        )
+
+        if skill.get("bss_primary_vs_qm_upper") is not None:
+            plot_bss_skill_metrics(
+                skill["bss_primary_vs_qm_upper"],
+                skill["bss_primary_vs_qm_lower"],
+                out_dir=str(plot_dir),
+                file_prefix="bss_rf_vs_qm",
+                upper_threshold_label="mean + 1σ",
+                lower_threshold_label="mean - 1σ",
+                title_prefix="RF vs QM",
+                land_mask_path=land_mask_path,
+            )
 
     if include_timeseries:
         plot_ensemble_timeseries(

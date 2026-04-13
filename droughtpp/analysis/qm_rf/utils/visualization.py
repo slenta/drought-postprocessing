@@ -441,6 +441,61 @@ def plot_bss_skill_metrics(
     return out_paths
 
 
+def plot_event_bss_comparison_maps(
+    bss_qm_vs_orig,
+    bss_ml_vs_orig,
+    bss_ml_vs_qm,
+    out_dir="qm_plots",
+    figsize=(15, 4),
+    threshold_label="P90 event",
+    file_prefix="event_bss_comparison",
+    land_mask_path=None,
+):
+    """
+    Plot event-based BSS comparison maps in one 3-panel figure.
+
+    Args:
+        bss_qm_vs_orig: np.ndarray (lat, lon), BSS of QM against Original
+        bss_ml_vs_orig: np.ndarray (lat, lon), BSS of ML against Original
+        bss_ml_vs_qm: np.ndarray (lat, lon), BSS of ML against QM
+    """
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    out_paths = []
+
+    land_mask = _load_land_mask(land_mask_path)
+    bss_qm_vs_orig = bss_qm_vs_orig * land_mask
+    bss_ml_vs_orig = bss_ml_vs_orig * land_mask
+    bss_ml_vs_qm = bss_ml_vs_qm * land_mask
+
+    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    fig.suptitle(
+        f"Event BSS Comparison ({threshold_label})",
+        fontsize=12,
+        fontweight="bold",
+    )
+
+    panels = [
+        ("QM vs Original", bss_qm_vs_orig),
+        ("ML vs Original", bss_ml_vs_orig),
+        ("ML vs QM", bss_ml_vs_qm),
+    ]
+
+    for ax, (title, data) in zip(axes, panels):
+        im = ax.imshow(data, cmap="RdBu_r", vmin=-1, vmax=1, origin="lower")
+        ax.set_title(f"{title} (mean={np.nanmean(data):.3f})", fontsize=9)
+        ax.set_xlabel("lon")
+        ax.set_ylabel("lat")
+        plt.colorbar(im, ax=ax, label="BSS")
+
+    plt.tight_layout()
+    out_png = Path(out_dir) / f"{file_prefix}.png"
+    plt.savefig(str(out_png), bbox_inches="tight", dpi=150)
+    out_paths.append(str(out_png))
+    plt.close()
+
+    return out_paths
+
+
 def plot_drought_hit_rate_maps(
     baseline_hit_rate,
     qm_hit_rate,
@@ -506,6 +561,7 @@ def plot_extreme_drought_hit_histogram(
     system_counts,
     out_dir="qm_plots",
     lower_percentile=10.0,
+    threshold_label=None,
     file_prefix="extreme_drought_p10_histogram",
 ):
     """
@@ -521,6 +577,7 @@ def plot_extreme_drought_hit_histogram(
                         (system_name, reference_count, hit_count, wrong_count)
         out_dir: output directory for plots
         lower_percentile: lower percentile threshold (default 10)
+        threshold_label: custom threshold label for panel titles (e.g. "> 0")
         file_prefix: output filename prefix
 
     Returns:
@@ -545,7 +602,12 @@ def plot_extreme_drought_hit_histogram(
         ax.set_xticks(np.arange(3))
         ax.set_xticklabels(bar_labels, rotation=20, ha="right")
         ax.set_ylabel("Count")
-        ax.set_title(f"{system_name} (<P{int(lower_percentile)})")
+        title_threshold = (
+            threshold_label
+            if threshold_label is not None
+            else f"<P{int(lower_percentile)}"
+        )
+        ax.set_title(f"{system_name} ({title_threshold})")
 
     fig.suptitle(
         "Extreme drought events histogram: reference vs hits vs wrong predictions",

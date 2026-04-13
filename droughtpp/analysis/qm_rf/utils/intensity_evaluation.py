@@ -3,10 +3,12 @@ import xarray as xr
 from pathlib import Path
 
 from droughtpp.analysis.qm_rf.utils.visualization import (
+    plot_bss_skill_metrics,
     plot_drought_hit_rate_maps,
     plot_extreme_drought_hit_histogram,
 )
 from droughtpp.analysis.qm_rf.utils.evaluation import (
+    brier_skill_score_between_ensembles_threshold,
     compute_gridcell_drought_hit_rate_percent,
     count_extreme_drought_events,
     load_paths_from_json,
@@ -114,33 +116,55 @@ def evaluate_intensity(
             include_example_time_means=True,
             include_difference_examples=True,
             land_mask_path=land_mask_path,
+            include_bss_maps=False,
         )
 
-        threshold_lower_p10 = np.nanpercentile(reference_np, 10.0, axis=0)
+        threshold_zero = np.zeros(reference_np.shape[1:], dtype=float)
+
+        bss_event_gt0, _, _ = brier_skill_score_between_ensembles_threshold(
+            corrected_np,
+            baseline_np,
+            reference_np,
+            threshold=0.0,
+            comparison="above",
+        )
+        plot_bss_skill_metrics(
+            bss_upper=bss_event_gt0,
+            bss_lower=bss_event_gt0,
+            out_dir=str(plot_dir),
+            upper_threshold_label="> 0",
+            lower_threshold_label="> 0",
+            file_prefix="bss_event_gt0",
+            title_prefix="RF-corrected vs Original",
+            land_mask_path=land_mask_path,
+        )
 
         if qm_np is not None:
             baseline_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
                 baseline_np,
                 reference_np,
-                threshold_lower_p10,
+                threshold_zero,
+                comparison="above",
             )
             qm_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
                 qm_np,
                 reference_np,
-                threshold_lower_p10,
+                threshold_zero,
+                comparison="above",
             )
             corrected_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
                 corrected_np,
                 reference_np,
-                threshold_lower_p10,
+                threshold_zero,
+                comparison="above",
             )
             plot_drought_hit_rate_maps(
                 baseline_hit_rate_p10,
                 qm_hit_rate_p10,
                 corrected_hit_rate_p10,
                 out_dir=str(plot_dir),
-                lower_threshold_label="P10",
-                file_prefix="drought_hit_rate_p10",
+                lower_threshold_label="> 0",
+                file_prefix="drought_hit_rate_gt0",
             )
 
         extreme_drought_counts = [
@@ -149,7 +173,8 @@ def evaluate_intensity(
                 *count_extreme_drought_events(
                     baseline_np,
                     reference_np,
-                    threshold_lower_p10,
+                    threshold_zero,
+                    comparison="above",
                 ),
             )
         ]
@@ -160,7 +185,8 @@ def evaluate_intensity(
                     *count_extreme_drought_events(
                         qm_np,
                         reference_np,
-                        threshold_lower_p10,
+                        threshold_zero,
+                        comparison="above",
                     ),
                 )
             )
@@ -170,7 +196,8 @@ def evaluate_intensity(
                 *count_extreme_drought_events(
                     corrected_np,
                     reference_np,
-                    threshold_lower_p10,
+                    threshold_zero,
+                    comparison="above",
                 ),
             )
         )
@@ -178,6 +205,6 @@ def evaluate_intensity(
         plot_extreme_drought_hit_histogram(
             extreme_drought_counts,
             out_dir=str(plot_dir),
-            lower_percentile=10.0,
-            file_prefix="extreme_drought_p10_histogram",
+            threshold_label="> 0",
+            file_prefix="extreme_drought_gt0_histogram",
         )

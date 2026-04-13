@@ -20,7 +20,10 @@ from .knn_random_effects import LocalKNNRandomEffectsRegressor
 from .features import RFFeatureBuilder
 from ..config_loader import get_qm_rf_global_config
 from droughtpp.analysis.qm_rf.utils.spei_evaluation import evaluate_spei
-from droughtpp.analysis.qm_rf.utils.cwb_evaluation import evaluate_cwb
+from droughtpp.analysis.qm_rf.utils.cwb_evaluation import (
+    evaluate_cwb,
+    evaluate_cwb_events,
+)
 from droughtpp.analysis.qm_rf.utils.intensity_evaluation import evaluate_intensity
 from droughtpp.analysis.qm_rf.utils.visualization import plot_feature_importance_table
 from droughtpp.analysis.qm_rf.utils.spei_from_rf import (
@@ -36,22 +39,11 @@ def _build_group_labels(stacked_da: xr.DataArray, years: np.ndarray, group_by: s
         return years.astype(str)
 
     if group_by == "calendar_month":
-        if "time" not in stacked_da.coords:
-            raise ValueError(
-                "group_by=calendar_month requested but time coord is missing"
-            )
         months = pd.to_datetime(stacked_da.coords["time"].values).month
         return months.astype(str)
 
     if group_by == "member":
-        if "member" not in stacked_da.coords:
-            raise ValueError("group_by=member requested but member coord is missing")
         return np.asarray(stacked_da.coords["member"].values).astype(str)
-
-    if "latitude" not in stacked_da.coords or "longitude" not in stacked_da.coords:
-        raise ValueError(
-            f"group_by={group_by} requires latitude/longitude coords in stacked samples"
-        )
 
     lat = np.asarray(stacked_da.coords["latitude"].values)
     lon = np.asarray(stacked_da.coords["longitude"].values)
@@ -67,7 +59,44 @@ def _build_group_labels(stacked_da: xr.DataArray, years: np.ndarray, group_by: s
         )
         return np.char.add(grid, np.char.add("_", years.astype(str)))
 
-    raise ValueError(f"Unsupported mixed group_by value: {group_by}")
+
+def _build_group_labels_with_quantiles(
+    stacked_da: xr.DataArray,
+    years: np.ndarray,
+    group_by: str,
+    X_full: pd.DataFrame | None = None,
+    quantile_group_predictor: str | None = None,
+    quantile_group_n: int | None = None,
+):
+    mode = str(group_by).lower()
+    if mode != "predictor_quantile":
+        return _build_group_labels(stacked_da, years, group_by)
+
+    predictor = str(quantile_group_predictor or "").strip()
+    if predictor not in X_full.columns:
+        available = ", ".join(X_full.columns.astype(str).tolist())
+
+    n_quantiles = int(quantile_group_n if quantile_group_n is not None else 10)
+    n_quantiles = max(2, n_quantiles)
+
+    values = pd.to_numeric(X_full[predictor], errors="coerce").to_numpy(dtype=float)
+    finite_mask = np.isfinite(values)
+    labels = np.full(values.shape[0], f"{predictor}_qnan", dtype=object)
+
+    unique_finite = np.unique(values[finite_mask])
+
+    q_effective = min(n_quantiles, int(unique_finite.size))
+    bin_ids = pd.qcut(
+        values[finite_mask],
+        q=q_effective,
+        labels=False,
+        duplicates="drop",
+    )
+    labels[finite_mask] = np.char.add(
+        f"{predictor}_q",
+        np.asarray(bin_ids).astype(int).astype(str),
+    )
+    return labels.astype(str)
 
 
 def _select_knn_feature_frame(
@@ -119,6 +148,8 @@ def _append_eval_block(
     y_parts: list,
     group_parts: list,
     knn_parts: list,
+    quantile_group_predictor: str | None,
+    quantile_group_n: int | None,
 ):
     res_s = RandomForestBiasCorrector._stack_by_samples(res_da)
     X_full, years = feature_builder.build(pred_da)
@@ -132,7 +163,14 @@ def _append_eval_block(
     if str(group_by).lower() in {"knn_spatial", "knn_feature"}:
         groups_full = np.repeat("knn", len(y_full)).astype(str)
     else:
-        groups_full = _build_group_labels(res_s, years, group_by)
+        groups_full = _build_group_labels_with_quantiles(
+            res_s,
+            years,
+            group_by,
+            X_full=X_full,
+            quantile_group_predictor=quantile_group_predictor,
+            quantile_group_n=quantile_group_n,
+        )
 
     finite_mask = np.isfinite(y_full.values) & np.all(
         np.isfinite(X_full.values), axis=1
@@ -163,6 +201,8 @@ def collect_eval_set(
     group_by: str = "grid_id",
     correction_target: str = "member",
     knn_feature_columns: List[str] | None = None,
+    quantile_group_predictor: str | None = None,
+    quantile_group_n: int | None = None,
 ):
     with open(residuals_json, "r") as fh:
         residuals = json.load(fh)
@@ -198,6 +238,8 @@ def collect_eval_set(
             y_parts,
             group_parts,
             knn_parts,
+            quantile_group_predictor,
+            quantile_group_n,
         )
     else:
         for resid_path, qm_hindcast_path in zip(residuals, qm_hindcasts):
@@ -221,6 +263,8 @@ def collect_eval_set(
                 y_parts,
                 group_parts,
                 knn_parts,
+                quantile_group_predictor,
+                quantile_group_n,
             )
 
     if len(X_parts) == 0:
@@ -253,6 +297,8 @@ def save_predicted_residuals(
     model_type: str = "rf",
     mixed_group_by: str = "grid_id",
     knn_feature_columns: List[str] | None = None,
+    quantile_group_predictor: str | None = None,
+    quantile_group_n: int | None = None,
     save_spei: bool = True,
     suffix: str = "_qm_rf_residuals",
     correction_target: str = "member",
@@ -299,7 +345,14 @@ def save_predicted_residuals(
                 knn_feature_columns=knn_feature_columns,
             )
         else:
-            groups_pred = _build_group_labels(pred_s, years, mixed_group_by)
+            groups_pred = _build_group_labels_with_quantiles(
+                pred_s,
+                years,
+                mixed_group_by,
+                X_full=X_pred,
+                quantile_group_predictor=quantile_group_predictor,
+                quantile_group_n=quantile_group_n,
+            )
             knn_pred = None
 
         eval_mask_year = np.isin(years, eval_years)
@@ -426,7 +479,14 @@ def save_predicted_residuals(
                     knn_feature_columns=knn_feature_columns,
                 )
             else:
-                groups_pred = _build_group_labels(pred_s, years, mixed_group_by)
+                groups_pred = _build_group_labels_with_quantiles(
+                    pred_s,
+                    years,
+                    mixed_group_by,
+                    X_full=X_pred,
+                    quantile_group_predictor=quantile_group_predictor,
+                    quantile_group_n=quantile_group_n,
+                )
                 knn_pred = None
 
             eval_mask_year = np.isin(years, eval_years)
@@ -515,6 +575,193 @@ def save_predicted_residuals(
     return spei_paths_json, residual_paths_json, corrected_cwb_paths_json
 
 
+def save_predicted_event_probabilities(
+    model,
+    qm_hindcasts_json: Path,
+    var_name: str,
+    eval_years: List[int],
+    out_dir: Path,
+    event_probability_paths_json: Path,
+    feature_builder: RFFeatureBuilder,
+    leadmonth: int,
+    model_type: str = "rf",
+    mixed_group_by: str = "grid_id",
+    knn_feature_columns: List[str] | None = None,
+    quantile_group_predictor: str | None = None,
+    quantile_group_n: int | None = None,
+    correction_target: str = "member",
+    event_probability_var: str = "event_probability",
+):
+    with open(qm_hindcasts_json, "r") as fh:
+        qm_hindcasts = json.load(fh)
+
+    event_probability_paths = []
+    event_probability_paths_json.parent.mkdir(parents=True, exist_ok=True)
+    event_base = Path(f"{out_dir}/event_probability/")
+    event_base.mkdir(parents=True, exist_ok=True)
+
+    correction_mode = str(correction_target).lower()
+
+    if correction_mode in {"ensemble_mean", "mean", "ens_mean"}:
+        qm_member_das = []
+        for qm_fp in qm_hindcasts:
+            with xr.open_dataset(str(qm_fp)) as ds_qm:
+                qm_member_das.append(ds_qm[var_name].load())
+
+        qm_ensemble = xr.concat(qm_member_das, dim="member")
+        qm_mean = qm_ensemble.mean("member", skipna=True)
+
+        pred_s = RandomForestBiasCorrector._stack_by_samples(qm_mean)
+        X_pred, years = feature_builder.build(qm_mean)
+        group_mode = str(mixed_group_by).lower()
+        is_knn_mode = group_mode in {"knn_spatial", "knn_feature"}
+
+        if is_knn_mode:
+            groups_pred = np.repeat("knn", X_pred.shape[0]).astype(str)
+            knn_pred = _build_knn_neighbor_features(
+                pred_s,
+                X_pred,
+                mixed_group_by,
+                knn_feature_columns=knn_feature_columns,
+            )
+        else:
+            groups_pred = _build_group_labels_with_quantiles(
+                pred_s,
+                years,
+                mixed_group_by,
+                X_full=X_pred,
+                quantile_group_predictor=quantile_group_predictor,
+                quantile_group_n=quantile_group_n,
+            )
+            knn_pred = None
+
+        eval_mask_year = np.isin(years, eval_years)
+        finite_x_mask = np.all(np.isfinite(X_pred.values), axis=1)
+        eval_mask = eval_mask_year & finite_x_mask
+
+        preds_array = np.full(X_pred.shape[0], np.nan, dtype=float)
+        if eval_mask.any():
+            if str(model_type).lower() in {"mixed_rf", "mixed"}:
+                if isinstance(model, LocalKNNRandomEffectsRegressor):
+                    preds_array[eval_mask] = model.predict(
+                        X_pred.values[eval_mask],
+                        neighbor_features=knn_pred[eval_mask],
+                    )
+                else:
+                    preds_array[eval_mask] = model.predict(
+                        X_pred.values[eval_mask],
+                        groups=groups_pred[eval_mask],
+                    )
+            else:
+                preds_array[eval_mask] = model.predict(X_pred.values[eval_mask])
+
+        pred_da = xr.DataArray(
+            preds_array, coords=(pred_s.coords["sample"],), dims=("sample",)
+        ).unstack("sample")
+        pred_da = pred_da.clip(min=0.0, max=1.0)
+
+        valid_times = np.unique(pred_s.coords["time"].values[eval_mask_year])
+        pred_da_valid = pred_da.sel(time=pd.to_datetime(valid_times))
+
+        for qm_fp in qm_hindcasts:
+            qm_fp = str(qm_fp)
+            with xr.open_dataset(qm_fp) as ds_qm:
+                p = Path(qm_fp)
+                out_path = event_base / f"{p.stem}_qm_rf_eventprob_lm{leadmonth}.nc"
+
+                orig_time_sel = ds_qm["time"].sel(time=pd.to_datetime(valid_times))
+                ds_out = ds_qm.sel(time=pd.to_datetime(valid_times)).copy()
+                ds_out[event_probability_var] = pred_da_valid
+                ds_out = ds_out.assign_coords(time=orig_time_sel)
+                ds_out["time"].attrs = ds_qm["time"].attrs
+                ds_out = ds_out[[event_probability_var]]
+                ds_out.to_netcdf(str(out_path))
+                ds_out.close()
+                event_probability_paths.append(str(out_path))
+    else:
+        for qm_fp in tqdm(
+            qm_hindcasts,
+            total=len(qm_hindcasts),
+            desc="Saving RF event probabilities",
+        ):
+            qm_fp = str(qm_fp)
+            ds_qm = xr.open_dataset(qm_fp)
+            qm_da = ds_qm[var_name]
+
+            pred_s = RandomForestBiasCorrector._stack_by_samples(qm_da)
+            X_pred, years = feature_builder.build(qm_da)
+            group_mode = str(mixed_group_by).lower()
+            is_knn_mode = group_mode in {"knn_spatial", "knn_feature"}
+
+            if is_knn_mode:
+                groups_pred = np.repeat("knn", X_pred.shape[0]).astype(str)
+                knn_pred = _build_knn_neighbor_features(
+                    pred_s,
+                    X_pred,
+                    mixed_group_by,
+                    knn_feature_columns=knn_feature_columns,
+                )
+            else:
+                groups_pred = _build_group_labels_with_quantiles(
+                    pred_s,
+                    years,
+                    mixed_group_by,
+                    X_full=X_pred,
+                    quantile_group_predictor=quantile_group_predictor,
+                    quantile_group_n=quantile_group_n,
+                )
+                knn_pred = None
+
+            eval_mask_year = np.isin(years, eval_years)
+            finite_x_mask = np.all(np.isfinite(X_pred.values), axis=1)
+            eval_mask = eval_mask_year & finite_x_mask
+
+            preds_array = np.full(X_pred.shape[0], np.nan, dtype=float)
+            if eval_mask.any():
+                if str(model_type).lower() in {"mixed_rf", "mixed"}:
+                    if isinstance(model, LocalKNNRandomEffectsRegressor):
+                        preds_array[eval_mask] = model.predict(
+                            X_pred.values[eval_mask],
+                            neighbor_features=knn_pred[eval_mask],
+                        )
+                    else:
+                        preds_array[eval_mask] = model.predict(
+                            X_pred.values[eval_mask],
+                            groups=groups_pred[eval_mask],
+                        )
+                else:
+                    preds_array[eval_mask] = model.predict(X_pred.values[eval_mask])
+
+            pred_da_stacked = xr.DataArray(
+                preds_array, coords=(pred_s.coords["sample"],), dims=("sample",)
+            )
+            pred_da = pred_da_stacked.unstack("sample").clip(min=0.0, max=1.0)
+
+            valid_times = np.unique(pred_s.coords["time"].values[eval_mask_year])
+            orig_time_sel = ds_qm["time"].sel(time=pd.to_datetime(valid_times))
+
+            ds_out = ds_qm.sel(time=pd.to_datetime(valid_times)).copy()
+            ds_out[event_probability_var] = pred_da.sel(
+                time=pd.to_datetime(valid_times)
+            )
+            ds_out = ds_out.assign_coords(time=orig_time_sel)
+            ds_out["time"].attrs = ds_qm["time"].attrs
+            ds_out = ds_out[[event_probability_var]]
+
+            p = Path(qm_fp)
+            out_path = event_base / f"{p.stem}_qm_rf_eventprob_lm{leadmonth}.nc"
+            ds_out.to_netcdf(str(out_path))
+            event_probability_paths.append(str(out_path))
+
+            ds_qm.close()
+            ds_out.close()
+
+    with open(event_probability_paths_json, "w") as fh:
+        json.dump(event_probability_paths, fh, indent=2)
+
+    return event_probability_paths_json
+
+
 def evaluate(config_path: Path | None = None, config_overrides=None):
     default_cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
     cfg = get_qm_rf_global_config(
@@ -526,11 +773,33 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     out_dir = Path(cfg["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
     var_name = cfg["var_name"]
+    training_target = str(cfg.get("training_target", "residual")).lower()
+    is_event_target = training_target in {"event", "event_p90"}
+    event_cfg = cfg.get("event_model", {}) or {}
+    event_percentile = float(event_cfg.get("percentile", 90.0))
+    event_probability_threshold = float(event_cfg.get("probability_threshold", 0.5))
+    event_predictor_var = str(event_cfg.get("predictor_var", cfg["var_name"]))
+    event_reference_data = Path(event_cfg.get("reference_data", cfg["reference_data"]))
+
+    if is_event_target:
+        target_scope = f"{event_predictor_var}/target_{training_target}"
+        feature_var = event_predictor_var
+        feature_reference_path = event_reference_data
+    else:
+        target_scope = var_name
+        feature_var = cfg["var_name"]
+        feature_reference_path = Path(cfg["reference_data"])
     workflow = cfg["workflow"]
     model_type = str(cfg.get("ml_arguments", {}).get("model_type", "rf")).lower()
     mixed_group_by = cfg.get("ml_arguments", {}).get("mixed_group_by", "grid_id")
+    split_years_cfg = cfg.get("ml_arguments", {}).get("split_years", {}) or {}
+    eval_years = split_years_cfg.get("test", cfg.get("leave_out_years", []))
     correction_target = cfg.get("ml_arguments", {}).get("correction_target", "member")
     knn_feature_columns = cfg.get("ml_arguments", {}).get("knn_feature_columns")
+    quantile_group_predictor = cfg.get("ml_arguments", {}).get(
+        "quantile_group_predictor"
+    )
+    quantile_group_n = cfg.get("ml_arguments", {}).get("quantile_group_n", 10)
     spread_reconstruction = cfg.get("ml_arguments", {}).get(
         "spread_reconstruction", "preserve_qm"
     )
@@ -544,8 +813,8 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     )
 
     feature_builder = RFFeatureBuilder(
-        Path(cfg["reference_data"]),
-        cfg["var_name"],
+        feature_reference_path,
+        feature_var,
         cfg.get("additional_reference_features", []),
         cfg.get("include_obs_prev_lags", True),
         cfg.get("feature_flags", {}),
@@ -570,14 +839,14 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
         if needs_rf_eval_paths:
             residuals_json = (
                 Path(cfg["output_dir"])
-                / var_name
+                / feature_var
                 / "paths"
                 / f"lm{leadmonth}"
                 / "qm_residuals_paths.json"
             )
             qm_hindcasts_json = (
                 Path(cfg["output_dir"])
-                / var_name
+                / feature_var
                 / "paths"
                 / f"lm{leadmonth}"
                 / "qm_hindcast_paths.json"
@@ -585,13 +854,15 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
             X_eval, y_eval, groups_eval, knn_eval = collect_eval_set(
                 residuals_json,
                 qm_hindcasts_json,
-                cfg["var_name"],
+                feature_var,
                 cfg["predictor_vars"],
-                cfg["leave_out_years"],
+                eval_years,
                 feature_builder,
                 group_by=mixed_group_by,
                 correction_target=correction_target,
                 knn_feature_columns=knn_feature_columns,
+                quantile_group_predictor=quantile_group_predictor,
+                quantile_group_n=quantile_group_n,
             )
             feature_count = int(X_eval.shape[1])
             rf_results_tag_lm = f"{rf_results_tag}_nf{feature_count}"
@@ -600,14 +871,14 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
             model_suffix = f"lm{leadmonth}" if train_leadmonth_specific else "alllm"
             model_path = (
                 Path(cfg["model_dir"])
-                / var_name
+                / target_scope
                 / rf_results_tag_lm
                 / f"{cfg['model_name']}_{model_suffix}.joblib"
             )
             model = load(model_path)
             metrics["n_eval_samples"] = int(len(y_eval))
             print(
-                f"Evaluating RF predictions for leadmonth={leadmonth} on held-out years {cfg['leave_out_years']} with model from {model_path}"
+                f"Evaluating RF predictions for leadmonth={leadmonth} on held-out years {eval_years} with model from {model_path}"
             )
 
             # Print mixed-model diagnostics for MERF and KNN mixed variants.
@@ -643,7 +914,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
 
         month_data_dir = (
             out_dir
-            / var_name
+            / target_scope
             / "data"
             / "rf_eval"
             / rf_results_tag_lm
@@ -653,7 +924,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
 
         spei_paths_json = (
             out_dir
-            / var_name
+            / target_scope
             / "paths"
             / "rf_eval"
             / rf_results_tag_lm
@@ -662,7 +933,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
         )
         residual_paths_json = (
             out_dir
-            / var_name
+            / target_scope
             / "paths"
             / "rf_eval"
             / rf_results_tag_lm
@@ -671,66 +942,116 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
         )
         corrected_cwb_paths_json = (
             out_dir
-            / var_name
+            / target_scope
             / "paths"
             / "rf_eval"
             / rf_results_tag_lm
             / leadmonth_label
             / "corrected_cwb_paths.json"
         )
+        event_probability_paths_json = (
+            out_dir
+            / target_scope
+            / "paths"
+            / "rf_eval"
+            / rf_results_tag_lm
+            / leadmonth_label
+            / "event_probability_paths.json"
+        )
 
         if run_rf_evaluate:
-            save_predicted_residuals(
-                model,
-                qm_hindcasts_json,
-                cfg["var_name"],
-                cfg["predictor_vars"],
-                cfg["leave_out_years"],
-                out_dir=month_data_dir,
-                spei_paths_json=spei_paths_json,
-                residual_paths_json=residual_paths_json,
-                corrected_cwb_paths_json=corrected_cwb_paths_json,
-                feature_builder=feature_builder,
-                leadmonth=leadmonth,
-                model_type=model_type,
-                mixed_group_by=mixed_group_by,
-                knn_feature_columns=knn_feature_columns,
-                save_spei=cfg["workflow"]["evaluate_spei"],
-                correction_target=correction_target,
-                spread_reconstruction=spread_reconstruction,
-                baseline_hindcasts_json=Path(cfg["hindcasts_json"]),
-            )
+            if is_event_target:
+                save_predicted_event_probabilities(
+                    model,
+                    qm_hindcasts_json,
+                    feature_var,
+                    eval_years,
+                    out_dir=month_data_dir,
+                    event_probability_paths_json=event_probability_paths_json,
+                    feature_builder=feature_builder,
+                    leadmonth=leadmonth,
+                    model_type=model_type,
+                    mixed_group_by=mixed_group_by,
+                    knn_feature_columns=knn_feature_columns,
+                    quantile_group_predictor=quantile_group_predictor,
+                    quantile_group_n=quantile_group_n,
+                    correction_target=correction_target,
+                )
+            else:
+                save_predicted_residuals(
+                    model,
+                    qm_hindcasts_json,
+                    cfg["var_name"],
+                    cfg["predictor_vars"],
+                    eval_years,
+                    out_dir=month_data_dir,
+                    spei_paths_json=spei_paths_json,
+                    residual_paths_json=residual_paths_json,
+                    corrected_cwb_paths_json=corrected_cwb_paths_json,
+                    feature_builder=feature_builder,
+                    leadmonth=leadmonth,
+                    model_type=model_type,
+                    mixed_group_by=mixed_group_by,
+                    knn_feature_columns=knn_feature_columns,
+                    quantile_group_predictor=quantile_group_predictor,
+                    quantile_group_n=quantile_group_n,
+                    save_spei=cfg["workflow"]["evaluate_spei"],
+                    correction_target=correction_target,
+                    spread_reconstruction=spread_reconstruction,
+                    baseline_hindcasts_json=Path(cfg["hindcasts_json"]),
+                )
 
         metrics_path = None
 
         if evaluate_cwb_flag:
-            plot_dir = f"{cfg['plot_dir']}/{var_name}/cwb_rf_eval/{rf_results_tag_lm}/{leadmonth_label}"
-            evaluate_cwb(
-                corrected_cwb_json=Path(corrected_cwb_paths_json),
-                hindcasts_json=Path(cfg["hindcasts_json"]),
-                reference_data=Path(cfg["reference_data"]),
-                out_dir=month_data_dir,
-                cwb_var=cfg["var_name"],
-                eval_years=cfg["leave_out_years"],
-                std_multiplier=float(cfg["spei_std_multiplier"]),
-                plot_dir=plot_dir,
-                qm_hindcasts_json=(
-                    Path(cfg["output_dir"])
-                    / var_name
-                    / "paths"
-                    / f"lm{leadmonth}"
-                    / "qm_hindcast_paths.json"
-                ),
-                qm_residuals_json=(
-                    Path(cfg["output_dir"])
-                    / var_name
-                    / "paths"
-                    / f"lm{leadmonth}"
-                    / "qm_residuals_paths.json"
-                ),
-                ml_residuals_json=Path(residual_paths_json),
-                land_mask_path=cfg.get("land_mask_path"),
-            )
+            plot_dir = f"{cfg['plot_dir']}/{var_name}/{cfg['training_target']}/cwb_rf_eval/{rf_results_tag_lm}/{leadmonth_label}"
+            if is_event_target:
+                evaluate_cwb_events(
+                    ml_event_probability_json=Path(event_probability_paths_json),
+                    hindcasts_json=Path(cfg["hindcasts_json"]),
+                    reference_data=event_reference_data,
+                    out_dir=month_data_dir,
+                    cwb_var=feature_var,
+                    eval_years=eval_years,
+                    event_percentile=event_percentile,
+                    probability_threshold=event_probability_threshold,
+                    plot_dir=plot_dir,
+                    qm_hindcasts_json=(
+                        Path(cfg["output_dir"])
+                        / feature_var
+                        / "paths"
+                        / f"lm{leadmonth}"
+                        / "qm_hindcast_paths.json"
+                    ),
+                    land_mask_path=cfg.get("land_mask_path"),
+                )
+            else:
+                evaluate_cwb(
+                    corrected_cwb_json=Path(corrected_cwb_paths_json),
+                    hindcasts_json=Path(cfg["hindcasts_json"]),
+                    reference_data=Path(cfg["reference_data"]),
+                    out_dir=month_data_dir,
+                    cwb_var=cfg["var_name"],
+                    eval_years=eval_years,
+                    std_multiplier=float(cfg["spei_std_multiplier"]),
+                    plot_dir=plot_dir,
+                    qm_hindcasts_json=(
+                        Path(cfg["output_dir"])
+                        / var_name
+                        / "paths"
+                        / f"lm{leadmonth}"
+                        / "qm_hindcast_paths.json"
+                    ),
+                    qm_residuals_json=(
+                        Path(cfg["output_dir"])
+                        / var_name
+                        / "paths"
+                        / f"lm{leadmonth}"
+                        / "qm_residuals_paths.json"
+                    ),
+                    ml_residuals_json=Path(residual_paths_json),
+                    land_mask_path=cfg.get("land_mask_path"),
+                )
 
             if run_rf_evaluate and hasattr(model, "feature_importances_"):
                 importances = np.asarray(model.feature_importances_, dtype=float)
@@ -753,7 +1074,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
                 reference_data=Path(cfg["reference_data"]),
                 out_dir=month_data_dir,
                 intensity_var=cfg["var_name"],
-                eval_years=cfg["leave_out_years"],
+                eval_years=eval_years,
                 std_multiplier=float(cfg["spei_std_multiplier"]),
                 plot_dir=plot_dir,
                 qm_hindcasts_json=(
@@ -777,7 +1098,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
                 hindcasts_spei_json=Path(cfg["hindcasts_spei_json"]),
                 reference_spei_json=Path(cfg["reference_spei_json"]),
                 out_dir=month_data_dir,
-                eval_years=cfg["leave_out_years"],
+                eval_years=eval_years,
                 std_multiplier=float(cfg["spei_std_multiplier"]),
                 plot_dir=plot_dir,
                 land_mask_path=cfg.get("land_mask_path"),
