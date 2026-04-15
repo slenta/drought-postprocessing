@@ -104,6 +104,115 @@ def compute_threshold_grid_from_reference(
     return np.nanpercentile(reference_train, percentile, axis=0)
 
 
+def build_mixed_group_labels(
+    stacked_da: xr.DataArray,
+    years: np.ndarray,
+    group_by: str,
+    X_full: pd.DataFrame | None = None,
+    quantile_group_predictor: str | None = None,
+    quantile_group_n: int | None = None,
+) -> np.ndarray:
+    mode = str(group_by).lower()
+
+    if mode == "year":
+        return np.asarray(years).astype(str)
+
+    if mode == "calendar_month":
+        months = pd.to_datetime(stacked_da.coords["time"].values).month
+        return np.asarray(months).astype(str)
+
+    if mode == "member":
+        return np.asarray(stacked_da.coords["member"].values).astype(str)
+
+    if mode == "predictor_quantile":
+        predictor = str(quantile_group_predictor or "").strip()
+
+        n_quantiles = int(quantile_group_n if quantile_group_n is not None else 10)
+        n_quantiles = max(2, n_quantiles)
+
+        values = pd.to_numeric(X_full[predictor], errors="coerce").to_numpy(dtype=float)
+        finite_mask = np.isfinite(values)
+        labels = np.full(values.shape[0], f"{predictor}_qnan", dtype=object)
+
+        if not np.any(finite_mask):
+            return labels.astype(str)
+
+        unique_finite = np.unique(values[finite_mask])
+        q_effective = min(n_quantiles, int(unique_finite.size))
+
+        if q_effective < 2:
+            labels[finite_mask] = f"{predictor}_q0"
+            return labels.astype(str)
+
+        try:
+            bin_ids = pd.qcut(
+                values[finite_mask],
+                q=q_effective,
+                labels=False,
+                duplicates="drop",
+            )
+            labels[finite_mask] = np.char.add(
+                f"{predictor}_q",
+                np.asarray(bin_ids).astype(int).astype(str),
+            )
+        except ValueError:
+            labels[finite_mask] = f"{predictor}_q0"
+
+        return labels.astype(str)
+
+    lat = np.asarray(stacked_da.coords["latitude"].values)
+    lon = np.asarray(stacked_da.coords["longitude"].values)
+
+    if mode == "grid_id":
+        return np.char.add(
+            np.round(lat, 6).astype(str), np.char.add("_", np.round(lon, 6).astype(str))
+        )
+
+    if mode == "grid_year":
+        grid = np.char.add(
+            np.round(lat, 6).astype(str), np.char.add("_", np.round(lon, 6).astype(str))
+        )
+        return np.char.add(grid, np.char.add("_", np.asarray(years).astype(str)))
+
+
+def select_knn_feature_frame(
+    X_full: pd.DataFrame,
+    knn_feature_columns: list[str] | None,
+) -> pd.DataFrame:
+    if not knn_feature_columns:
+        return X_full
+
+    requested = [str(col) for col in knn_feature_columns]
+    missing = [col for col in requested if col not in X_full.columns]
+    if missing:
+        available = ", ".join(X_full.columns.astype(str).tolist())
+        raise ValueError(
+            "ml_arguments.knn_feature_columns contains unknown feature(s): "
+            f"{missing}. Available features: [{available}]"
+        )
+
+    return X_full.loc[:, requested]
+
+
+def build_knn_neighbor_features(
+    stacked_da: xr.DataArray,
+    X_full: pd.DataFrame,
+    group_by: str,
+    knn_feature_columns: list[str] | None = None,
+) -> np.ndarray | None:
+    mode = str(group_by).lower()
+    if mode == "knn_spatial":
+        if "latitude" not in stacked_da.coords or "longitude" not in stacked_da.coords:
+            raise ValueError("knn_spatial requires latitude/longitude coordinates")
+        lat = np.asarray(stacked_da.coords["latitude"].values, dtype=float)
+        lon = np.asarray(stacked_da.coords["longitude"].values, dtype=float)
+        return np.column_stack([lat, lon])
+    if mode == "knn_feature":
+        X_knn = select_knn_feature_frame(X_full, knn_feature_columns)
+        return np.asarray(X_knn.values, dtype=float)
+    return None
+
+
 def load_eval_data(path: Path, var_name: str) -> xr.DataArray:
     with xr.open_dataset(path) as ds:
         data_array = ds[var_name].load()
@@ -159,6 +268,39 @@ def count_extreme_drought_events(
     )
 
     return reference_count, hit_count, wrong_count
+
+
+def count_binary_event_outcomes(
+    event_probability,
+    reference_event_binary,
+    probability_threshold: float = 0.5,
+):
+    """
+    Count event outcomes from a probability field and a reference event mask.
+
+    Args:
+        event_probability: np.ndarray (time, lat, lon), event probabilities in [0, 1]
+        reference_event_binary: np.ndarray (time, lat, lon), reference event mask
+        probability_threshold: threshold to convert probability into binary event
+
+    Returns:
+        tuple: (
+            event_binary, valid_mask,
+            reference_count, hit_count, wrong_count,
+        )
+    """
+    prob = np.asarray(event_probability)
+    ref = np.asarray(reference_event_binary)
+    ref_binary = ref >= 0.5
+
+    event_binary = prob >= float(probability_threshold)
+    valid_mask = np.isfinite(prob) & np.isfinite(ref)
+
+    reference_count = int(np.count_nonzero(ref_binary & valid_mask))
+    hit_count = int(np.count_nonzero(event_binary & ref_binary & valid_mask))
+    wrong_count = int(np.count_nonzero(event_binary & (~ref_binary) & valid_mask))
+
+    return event_binary, valid_mask, reference_count, hit_count, wrong_count
 
 
 def compute_gridcell_drought_hit_rate_percent(

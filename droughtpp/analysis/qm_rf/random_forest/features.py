@@ -11,7 +11,6 @@ class RFFeatureBuilder:
         reference_data_path: Path,
         var_name: str,
         additional_reference_features=None,
-        include_obs_prev_lags: bool = True,
         feature_flags: dict | None = None,
     ):
         with xr.open_dataset(reference_data_path) as ds:
@@ -39,7 +38,7 @@ class RFFeatureBuilder:
             round(float(value), 6): index
             for index, value in enumerate(reference_longitudes)
         }
-        self.include_obs_prev_lags = bool(include_obs_prev_lags)
+        # obs_prev lags now only via additional_reference_features
         raw_feature_flags = feature_flags or {}
         self.feature_flags = {
             "use_predictor": bool(raw_feature_flags.get("use_predictor", True)),
@@ -180,33 +179,7 @@ class RFFeatureBuilder:
 
         valid_spatial = (lat_indices >= 0) & (lon_indices >= 0)
 
-        if self.include_obs_prev_lags:
-            for year, first_month in first_month_by_year.items():
-                year_mask = years == int(year)
-                sample_mask = year_mask & valid_spatial
 
-                if not np.any(sample_mask):
-                    continue
-
-                sample_indices = np.where(sample_mask)[0]
-                sample_lat_indices = lat_indices[sample_indices]
-                sample_lon_indices = lon_indices[sample_indices]
-
-                for lag, target_array in (
-                    (1, obs_prev_1),
-                    (2, obs_prev_2),
-                    (3, obs_prev_3),
-                ):
-                    ref_year, ref_month = self._shift_year_month(year, first_month, lag)
-                    time_index = self.reference_time_index.get((ref_year, ref_month))
-                    if time_index is None:
-                        continue
-
-                    reference_slice = self.reference_values[time_index]
-                    target_array[sample_indices] = reference_slice[
-                        sample_lat_indices,
-                        sample_lon_indices,
-                    ]
 
         additional_lag_features = {}
         for feature in self.additional_reference_features:
@@ -298,10 +271,7 @@ class RFFeatureBuilder:
         if self.feature_flags["use_lead_month"]:
             feature_columns["lead_month"] = lead_months
 
-        if self.include_obs_prev_lags:
-            feature_columns["obs_prev_1"] = obs_prev_1
-            feature_columns["obs_prev_2"] = obs_prev_2
-            feature_columns["obs_prev_3"] = obs_prev_3
+
 
         features = pd.DataFrame(index=np.arange(n_samples))
         if feature_columns:

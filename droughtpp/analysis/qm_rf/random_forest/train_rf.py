@@ -20,108 +20,11 @@ from .knn_random_effects import LocalKNNRandomEffectsRegressor
 from .features import RFFeatureBuilder
 from ..config_loader import get_qm_rf_global_config
 from droughtpp.analysis.qm_rf.utils.evaluation import (
+    build_knn_neighbor_features,
+    build_mixed_group_labels,
     compute_threshold_grid_from_reference,
 )
-
-
-def _build_group_labels(stacked_da: xr.DataArray, years: np.ndarray, group_by: str):
-    group_by = str(group_by).lower()
-
-    if group_by == "year":
-        return years.astype(str)
-
-    if group_by == "calendar_month":
-        months = pd.to_datetime(stacked_da.coords["time"].values).month
-        return months.astype(str)
-
-    lat = np.asarray(stacked_da.coords["latitude"].values)
-    lon = np.asarray(stacked_da.coords["longitude"].values)
-
-    if group_by == "grid_id":
-        return np.char.add(
-            np.round(lat, 6).astype(str), np.char.add("_", np.round(lon, 6).astype(str))
-        )
-
-    if group_by == "grid_year":
-        grid = np.char.add(
-            np.round(lat, 6).astype(str), np.char.add("_", np.round(lon, 6).astype(str))
-        )
-        return np.char.add(grid, np.char.add("_", years.astype(str)))
-
-
-def _build_group_labels_with_quantiles(
-    stacked_da: xr.DataArray,
-    years: np.ndarray,
-    group_by: str,
-    X_full: pd.DataFrame | None = None,
-    quantile_group_predictor: str | None = None,
-    quantile_group_n: int | None = None,
-):
-    mode = str(group_by).lower()
-    if mode != "predictor_quantile":
-        return _build_group_labels(stacked_da, years, group_by)
-
-    predictor = str(quantile_group_predictor or "").strip()
-
-    n_quantiles = int(quantile_group_n if quantile_group_n is not None else 10)
-    n_quantiles = max(2, n_quantiles)
-
-    values = pd.to_numeric(X_full[predictor], errors="coerce").to_numpy(dtype=float)
-    finite_mask = np.isfinite(values)
-    labels = np.full(values.shape[0], f"{predictor}_qnan", dtype=object)
-
-    unique_finite = np.unique(values[finite_mask])
-
-    q_effective = min(n_quantiles, int(unique_finite.size))
-    bin_ids = pd.qcut(
-        values[finite_mask],
-        q=q_effective,
-        labels=False,
-        duplicates="drop",
-    )
-    labels[finite_mask] = np.char.add(
-        f"{predictor}_q",
-        np.asarray(bin_ids).astype(int).astype(str),
-    )
-    return labels.astype(str)
-
-
-def _select_knn_feature_frame(
-    X_full: pd.DataFrame,
-    knn_feature_columns: List[str] | None,
-) -> pd.DataFrame:
-    if not knn_feature_columns:
-        return X_full
-
-    requested = [str(col) for col in knn_feature_columns]
-    missing = [col for col in requested if col not in X_full.columns]
-    if missing:
-        available = ", ".join(X_full.columns.astype(str).tolist())
-        raise ValueError(
-            "ml_arguments.knn_feature_columns contains unknown feature(s): "
-            f"{missing}. Available features: [{available}]"
-        )
-
-    return X_full.loc[:, requested]
-
-
-def _build_knn_neighbor_features(
-    stacked_da: xr.DataArray,
-    X_full: pd.DataFrame,
-    group_by: str,
-    knn_feature_columns: List[str] | None = None,
-) -> np.ndarray | None:
-    mode = str(group_by).lower()
-    if mode == "knn_spatial":
-        if "latitude" not in stacked_da.coords or "longitude" not in stacked_da.coords:
-            raise ValueError("knn_spatial requires latitude/longitude coordinates")
-        lat = np.asarray(stacked_da.coords["latitude"].values, dtype=float)
-        lon = np.asarray(stacked_da.coords["longitude"].values, dtype=float)
-        return np.column_stack([lat, lon])
-    if mode == "knn_feature":
-        X_knn = _select_knn_feature_frame(X_full, knn_feature_columns)
-        return np.asarray(X_knn.values, dtype=float)
-    return None
+from droughtpp.analysis.qm_rf.utils.visualization import plot_feature_importance_table
 
 
 def plot_training_curve(training_history: dict, out_path: Path):
@@ -179,7 +82,7 @@ def _append_train_block(
     if str(group_by).lower() in {"knn_spatial", "knn_feature"}:
         groups_full = np.repeat("knn", len(y_full)).astype(str)
     else:
-        groups_full = _build_group_labels_with_quantiles(
+        groups_full = build_mixed_group_labels(
             res_s,
             years,
             group_by,
@@ -187,7 +90,7 @@ def _append_train_block(
             quantile_group_predictor=quantile_group_predictor,
             quantile_group_n=quantile_group_n,
         )
-    knn_full = _build_knn_neighbor_features(
+    knn_full = build_knn_neighbor_features(
         res_s,
         X_full,
         group_by,
@@ -355,7 +258,7 @@ def _append_event_train_block(
     if str(group_by).lower() in {"knn_spatial", "knn_feature"}:
         groups_full = np.repeat("knn", len(y_full)).astype(str)
     else:
-        groups_full = _build_group_labels_with_quantiles(
+        groups_full = build_mixed_group_labels(
             pred_s,
             years,
             group_by,
@@ -363,7 +266,7 @@ def _append_event_train_block(
             quantile_group_predictor=quantile_group_predictor,
             quantile_group_n=quantile_group_n,
         )
-    knn_full = _build_knn_neighbor_features(
+    knn_full = build_knn_neighbor_features(
         pred_s,
         X_full,
         group_by,
@@ -923,6 +826,17 @@ def train_and_save_model(
         ),
     )
 
+    leadmonth_dir = (
+        curve_dir_suffix if str(curve_dir_suffix).startswith("lm") else "all_leadmonths"
+    )
+    train_plot_dir = (
+        Path(cfg["plot_dir"])
+        / var_name
+        / "rf_train"
+        / rf_results_tag_lm
+        / leadmonth_dir
+    )
+
     # Print mixed-model diagnostics for MERF and KNN mixed variants.
     if is_mixed and isinstance(
         model, (MixedEffectsTreeRegressor, LocalKNNRandomEffectsRegressor)
@@ -938,19 +852,7 @@ def train_and_save_model(
         )
 
         # Save diagnostics plot
-        leadmonth_dir = (
-            curve_dir_suffix
-            if str(curve_dir_suffix).startswith("lm")
-            else "all_leadmonths"
-        )
-        diag_plot_path = (
-            Path(cfg["plot_dir"])
-            / var_name
-            / "rf_train"
-            / rf_results_tag_lm
-            / leadmonth_dir
-            / f"{cfg['model_name']}_merf_diagnostics.png"
-        )
+        diag_plot_path = train_plot_dir / f"{cfg['model_name']}_merf_diagnostics.png"
         save_merf_diagnostics_plot(diagnostics, diag_plot_path)
 
         # Save one diagnostics table per MERF iteration, if available.
@@ -962,24 +864,29 @@ def train_and_save_model(
         for iter_diag in iteration_diagnostics:
             iter_idx = int(iter_diag.get("iteration", 0))
             iter_plot_path = (
-                Path(cfg["plot_dir"])
-                / var_name
-                / "rf_train"
-                / rf_results_tag_lm
-                / leadmonth_dir
+                train_plot_dir
                 / f"{cfg['model_name']}_merf_diagnostics_iter{iter_idx:02d}.png"
             )
             save_merf_diagnostics_plot(iter_diag, iter_plot_path)
 
     curve_path = (
-        Path(cfg["plot_dir"])
-        / var_name
-        / "rf_train"
-        / rf_results_tag_lm
-        / curve_dir_suffix
-        / f"{cfg['model_name']}_{curve_file_suffix}_train_val_curve.png"
+        train_plot_dir / f"{cfg['model_name']}_{curve_file_suffix}_train_val_curve.png"
     )
+
     plot_training_curve(rf.training_history, curve_path)
+
+    raw_importances = getattr(model, "feature_importances_", None)
+    if raw_importances is None and hasattr(model, "base_model"):
+        raw_importances = getattr(model.base_model, "feature_importances_", None)
+
+    plot_feature_importance_table(
+        feature_names=X_train.columns.tolist(),
+        importances=np.asarray(raw_importances, dtype=float),
+        out_dir=train_plot_dir,
+        model_label=type(model).__name__,
+        top_n=30,
+        file_prefix=f"{cfg['model_name']}_{curve_file_suffix}_feature_importance",
+    )
 
     model_path = (
         Path(cfg["model_dir"])
@@ -1006,22 +913,14 @@ def train(config_path: Path | None = None, config_overrides=None):
     is_event_target = training_target in {"event", "event_p90"}
     event_cfg = cfg.get("event_model", {}) or {}
     event_percentile = float(event_cfg.get("percentile", 90.0))
-    event_predictor_var = str(event_cfg.get("predictor_var", cfg["var_name"]))
-    event_reference_data = Path(event_cfg.get("reference_data", cfg["reference_data"]))
-
-    if is_event_target:
-        training_var_name = event_predictor_var
-        training_reference_path = event_reference_data
-    else:
-        training_var_name = cfg["var_name"]
-        training_reference_path = Path(cfg["reference_data"])
-    path_scope_name = f"{training_var_name}/target_{training_target}"
+    training_var_name = cfg["var_name"]
+    training_reference_path = Path(cfg["reference_data"])
+    path_scope_name = f"{training_var_name}/{training_target}"
 
     feature_builder = RFFeatureBuilder(
         training_reference_path,
         training_var_name,
         cfg.get("additional_reference_features", []),
-        cfg.get("include_obs_prev_lags", True),
         cfg.get("feature_flags", {}),
     )
     leadmonths = cfg["leadmonth"]

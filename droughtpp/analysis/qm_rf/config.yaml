@@ -13,10 +13,8 @@ preprocessing_target: "cwb"
 # training_target: "event_p90" trains a binary event model with
 #   y = 1(obs_cwb > P90_obs),
 #   features include predictor + qm_event_p90 where qm_event_p90 = 1(qm_cwb > P90_qm).
-training_target: "event_p90"
+training_target: "residual"
 event_model:
-  predictor_var: "CWB"
-  reference_data: "${project_root}/droughtpp/eval_results/${experiment}/qm_rf/data/preprocessing/reference_cwb/reference_cwb_000.nc"
   percentile: 90.0
   probability_threshold: 0.5
 
@@ -40,14 +38,21 @@ model_name: "rf-basic"
 corrected_residuals_json: "${output_dir}/data/paths/corrected_residuals_paths.json"
 corrected_cwb_json: "${output_dir}/data/paths/corrected_cwb_paths.json"
 
-include_obs_prev_lags: true
+
 
 feature_flags:
   use_predictor: true
   use_lat: true 
   use_lon: true 
-  use_lead_month: false 
+  use_lead_month: true 
 additional_reference_features:
+  - name: variability 
+    path: /work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/eval_results/cwb/qm_rf/data/preprocessing/reference_cwb/reference_cwb_var_permonth.nc
+    var_name: CWB 
+    mode: monthly_climatology
+  - name: obs_anomalies
+    path: /work/bk1318/k202208/crai/hindcast-pp/Ml-Drought-Postprocessing/droughtpp/eval_results/cwb/qm_rf/data/preprocessing/reference_cwb/reference_cwb_anomalies.nc
+    var_name: "${var_name}"
   - name: tas
     path: /work/bk1318/k202208/crai/hindcast-pp/data/spei/era5/tas/era5-monthly/tas_Amon_reanalysis_era5_r1i1p1_19400101-20241231_tamsatregion_dwdgrid_invlat.nc
     var_name: tas
@@ -85,9 +90,8 @@ ml_arguments:
   chunk_size: 30
   model_type: "mixed_rf" # one of "rf", "xgboost", "mixed_rf"
   mixed_base_model: "xgboost" # for mixed_rf: "rf" or "xgboost"
-  mixed_group_by: "knn_feature" # one of "grid_id", "year", "grid_year", "calendar_month", "knn_spatial", "knn_feature", "predictor_quantile"
-  # Used only when mixed_group_by == "predictor_quantile"
-  quantile_group_predictor: "predictor"
+  mixed_group_by: "predictor_quantile" # one of "grid_id", "year", "grid_year", "calendar_month", "knn_spatial", "knn_feature", "predictor_quantile"
+  quantile_group_predictor: "variability" # Used only when mixed_group_by == "predictor_quantile"
   quantile_group_n: 10
   # Optional: restrict knn_feature distance space to a subset of feature columns.
   knn_feature_columns: ["predictor", "obs_prev_1", "lat", "lon"]
@@ -111,7 +115,7 @@ ml_arguments:
   knn_gaussian_sigma: null # if null, sigma is estimated from neighbor distances
   merf_n_iter: 1 # iterative mixed effects for non-KNN mixed mode
   # merf_tol: 1.0e-06
-  xgb_learning_rate: 0.05
+  xgb_learning_rate: 0.1
   xgb_max_depth: 4
   # xgb_eval_metric: "rmse"
 
