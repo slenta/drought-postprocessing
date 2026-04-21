@@ -207,7 +207,7 @@ def build_knn_neighbor_features(
         lat = np.asarray(stacked_da.coords["latitude"].values, dtype=float)
         lon = np.asarray(stacked_da.coords["longitude"].values, dtype=float)
         return np.column_stack([lat, lon])
-    if mode == "knn_feature":
+    if mode in {"knn_feature", "knn_proximity"}:
         X_knn = select_knn_feature_frame(X_full, knn_feature_columns)
         return np.asarray(X_knn.values, dtype=float)
     return None

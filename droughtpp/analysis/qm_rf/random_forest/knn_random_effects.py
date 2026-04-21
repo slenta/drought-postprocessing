@@ -54,6 +54,21 @@ class LocalKNNRandomEffectsRegressor:
         self._residuals_train: _t.Optional[np.ndarray] = None
         self._n_neighbors_effective: _t.Optional[int] = None
 
+    def _proximity_leaf_features(self, X: np.ndarray) -> np.ndarray:
+        X_arr = np.asarray(X)
+        if hasattr(self.base_model, "apply"):
+            leaves = self.base_model.apply(X_arr)
+        elif hasattr(self.base_model, "get_booster"):
+            import xgboost as xgb
+
+            booster = self.base_model.get_booster()
+            leaves = booster.predict(xgb.DMatrix(X_arr), pred_leaf=True)
+
+        leaves = np.asarray(leaves, dtype=float)
+        if leaves.ndim == 1:
+            leaves = leaves.reshape(-1, 1)
+        return leaves
+
     def _compute_weights(self, distances: np.ndarray) -> np.ndarray:
         if self.weighting == "inverse_distance":
             return 1.0 / (distances + self.eps)
@@ -73,11 +88,14 @@ class LocalKNNRandomEffectsRegressor:
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        neighbor_features_train: np.ndarray,
+        neighbor_features_train: _t.Optional[np.ndarray],
     ):
         X_arr = np.asarray(X_train)
         y_arr = np.asarray(y_train, dtype=float).reshape(-1)
-        nfeat = np.asarray(neighbor_features_train, dtype=float)
+        if self.mode == "proximity":
+            nfeat = self._proximity_leaf_features(X_arr)
+        else:
+            nfeat = np.asarray(neighbor_features_train, dtype=float)
 
         fixed = np.asarray(self.base_model.predict(X_arr), dtype=float).reshape(-1)
 
@@ -105,19 +123,27 @@ class LocalKNNRandomEffectsRegressor:
         denom = np.maximum(np.sum(weights, axis=1), self.eps)
         return numer / denom
 
-    def predict(self, X, neighbor_features):
+    def predict(self, X, neighbor_features=None):
         X_arr = np.asarray(X)
+        if self.mode == "proximity":
+            query_features = self._proximity_leaf_features(X_arr)
+        else:
+            query_features = neighbor_features
         fixed = np.asarray(self.base_model.predict(X_arr), dtype=float).reshape(-1)
-        random_effect = (
-            self.random_effect_shrinkage * self._predict_random_effect(neighbor_features)
+        random_effect = self.random_effect_shrinkage * self._predict_random_effect(
+            query_features
         )
         return fixed + random_effect
 
-    def predict_components(self, X, neighbor_features):
+    def predict_components(self, X, neighbor_features=None):
         X_arr = np.asarray(X)
+        if self.mode == "proximity":
+            query_features = self._proximity_leaf_features(X_arr)
+        else:
+            query_features = neighbor_features
         fixed = np.asarray(self.base_model.predict(X_arr), dtype=float).reshape(-1)
-        random_effect = (
-            self.random_effect_shrinkage * self._predict_random_effect(neighbor_features)
+        random_effect = self.random_effect_shrinkage * self._predict_random_effect(
+            query_features
         )
         combined = fixed + random_effect
         return fixed, random_effect, combined

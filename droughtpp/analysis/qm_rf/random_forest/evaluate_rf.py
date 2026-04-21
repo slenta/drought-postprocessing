@@ -9,6 +9,7 @@ import xarray as xr
 from joblib import load
 from tqdm import tqdm
 import scipy.stats as sps
+from cmethods import adjust
 
 from .model_rf import (
     RandomForestBiasCorrector,
@@ -56,7 +57,7 @@ def _append_eval_block(
         group_by,
         knn_feature_columns=knn_feature_columns,
     )
-    if str(group_by).lower() in {"knn_spatial", "knn_feature"}:
+    if str(group_by).lower() in {"knn_spatial", "knn_feature", "knn_proximity"}:
         groups_full = np.repeat("knn", len(y_full)).astype(str)
     else:
         groups_full = build_mixed_group_labels(
@@ -231,7 +232,7 @@ def save_predicted_residuals(
         pred_s = RF._stack_by_samples(qm_mean)
         X_pred, years = feature_builder.build(qm_mean)
         group_mode = str(mixed_group_by).lower()
-        is_knn_mode = group_mode in {"knn_spatial", "knn_feature"}
+        is_knn_mode = group_mode in {"knn_spatial", "knn_feature", "knn_proximity"}
         if is_knn_mode:
             groups_pred = np.repeat("knn", X_pred.shape[0]).astype(str)
             knn_pred = build_knn_neighbor_features(
@@ -365,7 +366,7 @@ def save_predicted_residuals(
             pred_s = RF._stack_by_samples(qm_da)
             X_pred, years = feature_builder.build(qm_da)
             group_mode = str(mixed_group_by).lower()
-            is_knn_mode = group_mode in {"knn_spatial", "knn_feature"}
+            is_knn_mode = group_mode in {"knn_spatial", "knn_feature", "knn_proximity"}
             if is_knn_mode:
                 groups_pred = np.repeat("knn", X_pred.shape[0]).astype(str)
                 knn_pred = build_knn_neighbor_features(
@@ -510,7 +511,7 @@ def save_predicted_event_probabilities(
         pred_s = RandomForestBiasCorrector._stack_by_samples(qm_mean)
         X_pred, years = feature_builder.build(qm_mean)
         group_mode = str(mixed_group_by).lower()
-        is_knn_mode = group_mode in {"knn_spatial", "knn_feature"}
+        is_knn_mode = group_mode in {"knn_spatial", "knn_feature", "knn_proximity"}
 
         if is_knn_mode:
             groups_pred = np.repeat("knn", X_pred.shape[0]).astype(str)
@@ -587,7 +588,7 @@ def save_predicted_event_probabilities(
             pred_s = RandomForestBiasCorrector._stack_by_samples(qm_da)
             X_pred, years = feature_builder.build(qm_da)
             group_mode = str(mixed_group_by).lower()
-            is_knn_mode = group_mode in {"knn_spatial", "knn_feature"}
+            is_knn_mode = group_mode in {"knn_spatial", "knn_feature", "knn_proximity"}
 
             if is_knn_mode:
                 groups_pred = np.repeat("knn", X_pred.shape[0]).astype(str)
@@ -658,6 +659,97 @@ def save_predicted_event_probabilities(
     return event_probability_paths_json
 
 
+def apply_post_qm_from_val_years(
+    corrected_cwb_test_json: Path,
+    corrected_cwb_val_json: Path,
+    reference_data: Path,
+    var_name: str,
+    out_dir: Path,
+    n_quantiles: int,
+    kind: str,
+    make_spei: bool,
+):
+    with open(corrected_cwb_test_json, "r") as fh:
+        test_paths = [Path(p) for p in json.load(fh)]
+    with open(corrected_cwb_val_json, "r") as fh:
+        val_paths = [Path(p) for p in json.load(fh)]
+
+    cwb_out_dir = out_dir / "cwb_corrected_postqm"
+    cwb_out_dir.mkdir(parents=True, exist_ok=True)
+    spei_out_dir = out_dir / "spei_corrected_postqm"
+    if make_spei:
+        spei_out_dir.mkdir(parents=True, exist_ok=True)
+
+    post_cwb_paths = []
+    post_spei_paths = []
+
+    with xr.open_dataset(reference_data) as ds_ref:
+        ref_da = ds_ref[var_name].load()
+
+    for test_path, val_path in zip(test_paths, val_paths):
+        with xr.open_dataset(test_path) as ds_test, xr.open_dataset(val_path) as ds_val:
+            test_da = ds_test[var_name].squeeze()
+            val_da = ds_val[var_name].squeeze()
+
+            common_val_time = np.intersect1d(
+                ref_da["time"].values,
+                val_da["time"].values,
+            )
+            if common_val_time.size == 0:
+                raise ValueError(
+                    f"No overlapping val-year timestamps between reference and {val_path}"
+                )
+
+            ref_cal = ref_da.sel(time=common_val_time)
+            simh_cal = val_da.sel(time=common_val_time)
+            simp_eval = test_da
+
+            adjusted = adjust(
+                method="quantile_mapping",
+                obs=ref_cal,
+                simh=simh_cal,
+                simp=simp_eval,
+                n_quantiles=int(n_quantiles),
+                kind=str(kind),
+            )
+
+            ds_cwb = ds_test.copy()
+            ds_cwb[var_name] = adjusted[var_name]
+            cwb_out_path = cwb_out_dir / f"{test_path.stem}_postqm.nc"
+            ds_cwb.to_netcdf(str(cwb_out_path))
+            post_cwb_paths.append(str(cwb_out_path))
+
+            if make_spei:
+                spei = compute_spei_from_rf_corrected(
+                    adjusted[var_name].squeeze(),
+                    month_range=(1, 3),
+                    var_names=[var_name, "spei"],
+                    dist=sps.fisk,
+                )
+                ds_spei = ds_test.copy()
+                ds_spei["spei"] = spei
+                spei_out_path = spei_out_dir / f"{test_path.stem}_postqm_spei.nc"
+                ds_spei.to_netcdf(str(spei_out_path))
+                ds_spei.close()
+                post_spei_paths.append(str(spei_out_path))
+
+            ds_cwb.close()
+
+    post_cwb_json = out_dir / "paths" / "post_qm_corrected_cwb_paths.json"
+    post_cwb_json.parent.mkdir(parents=True, exist_ok=True)
+    with open(post_cwb_json, "w") as fh:
+        json.dump(post_cwb_paths, fh, indent=2)
+
+    post_spei_json = None
+    if make_spei:
+        post_spei_json = out_dir / "paths" / "post_qm_corrected_spei_paths.json"
+        post_spei_json.parent.mkdir(parents=True, exist_ok=True)
+        with open(post_spei_json, "w") as fh:
+            json.dump(post_spei_paths, fh, indent=2)
+
+    return post_cwb_json, post_spei_json
+
+
 def evaluate(config_path: Path | None = None, config_overrides=None):
     default_cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
     cfg = get_qm_rf_global_config(
@@ -681,6 +773,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     model_type = str(cfg.get("ml_arguments", {}).get("model_type", "rf")).lower()
     mixed_group_by = cfg.get("ml_arguments", {}).get("mixed_group_by", "grid_id")
     split_years_cfg = cfg.get("ml_arguments", {}).get("split_years", {}) or {}
+    val_years = split_years_cfg.get("val", [])
     eval_years = split_years_cfg.get("test", cfg.get("leave_out_years", []))
     correction_target = cfg.get("ml_arguments", {}).get("correction_target", "member")
     knn_feature_columns = cfg.get("ml_arguments", {}).get("knn_feature_columns")
@@ -701,6 +794,11 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     train_leadmonth_specific = bool(
         cfg.get("ml_arguments", {}).get("train_leadmonth_specific", True)
     )
+
+    post_qm_cfg = cfg.get("ml_post_qm", {}) or {}
+    post_qm_enabled = bool(post_qm_cfg.get("enabled", False))
+    post_qm_n_quantiles = int(post_qm_cfg.get("n_quantiles", 20))
+    post_qm_kind = str(post_qm_cfg.get("kind", "+"))
 
     feature_builder = RFFeatureBuilder(
         feature_reference_path,
@@ -904,6 +1002,74 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
                     spread_reconstruction=spread_reconstruction,
                     baseline_hindcasts_json=Path(cfg["hindcasts_json"]),
                 )
+
+                if post_qm_enabled:
+
+                    val_data_dir = month_data_dir / "post_qm_val_calibration"
+                    val_spei_paths_json = (
+                        out_dir
+                        / target_scope
+                        / "paths"
+                        / "rf_eval"
+                        / rf_results_tag_lm
+                        / leadmonth_label
+                        / "val_corrected_spei_paths.json"
+                    )
+                    val_residual_paths_json = (
+                        out_dir
+                        / target_scope
+                        / "paths"
+                        / "rf_eval"
+                        / rf_results_tag_lm
+                        / leadmonth_label
+                        / "val_corrected_residuals_paths.json"
+                    )
+                    val_corrected_cwb_paths_json = (
+                        out_dir
+                        / target_scope
+                        / "paths"
+                        / "rf_eval"
+                        / rf_results_tag_lm
+                        / leadmonth_label
+                        / "val_corrected_cwb_paths.json"
+                    )
+
+                    save_predicted_residuals(
+                        model,
+                        qm_hindcasts_json,
+                        cfg["var_name"],
+                        cfg["predictor_vars"],
+                        val_years,
+                        out_dir=val_data_dir,
+                        spei_paths_json=val_spei_paths_json,
+                        residual_paths_json=val_residual_paths_json,
+                        corrected_cwb_paths_json=val_corrected_cwb_paths_json,
+                        feature_builder=feature_builder,
+                        leadmonth=leadmonth,
+                        model_type=model_type,
+                        mixed_group_by=mixed_group_by,
+                        knn_feature_columns=knn_feature_columns,
+                        quantile_group_predictor=quantile_group_predictor,
+                        quantile_group_n=quantile_group_n,
+                        save_spei=False,
+                        correction_target=correction_target,
+                        spread_reconstruction=spread_reconstruction,
+                        baseline_hindcasts_json=Path(cfg["hindcasts_json"]),
+                    )
+
+                    post_cwb_json, post_spei_json = apply_post_qm_from_val_years(
+                        corrected_cwb_test_json=Path(corrected_cwb_paths_json),
+                        corrected_cwb_val_json=Path(val_corrected_cwb_paths_json),
+                        reference_data=Path(cfg["reference_data"]),
+                        var_name=cfg["var_name"],
+                        out_dir=month_data_dir,
+                        n_quantiles=post_qm_n_quantiles,
+                        kind=post_qm_kind,
+                        make_spei=bool(cfg["workflow"]["evaluate_spei"]),
+                    )
+                    corrected_cwb_paths_json = post_cwb_json
+                    if post_spei_json is not None:
+                        spei_paths_json = post_spei_json
 
         metrics_path = None
 

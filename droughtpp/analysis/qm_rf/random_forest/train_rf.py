@@ -79,7 +79,7 @@ def _append_train_block(
     res_s = RandomForestBiasCorrector._stack_by_samples(res_da)
     X_full, years = feature_builder.build(pred_da)
     y_full = pd.Series(res_s.values, name="residual")
-    if str(group_by).lower() in {"knn_spatial", "knn_feature"}:
+    if str(group_by).lower() in {"knn_spatial", "knn_feature", "knn_proximity"}:
         groups_full = np.repeat("knn", len(y_full)).astype(str)
     else:
         groups_full = build_mixed_group_labels(
@@ -255,7 +255,7 @@ def _append_event_train_block(
     ).astype(float)
 
     y_full = pd.Series(ref_event_p90, name="obs_event_p90")
-    if str(group_by).lower() in {"knn_spatial", "knn_feature"}:
+    if str(group_by).lower() in {"knn_spatial", "knn_feature", "knn_proximity"}:
         groups_full = np.repeat("knn", len(y_full)).astype(str)
     else:
         groups_full = build_mixed_group_labels(
@@ -760,7 +760,7 @@ def train_and_save_model(
     model_type = str(cfg["ml_arguments"].get("model_type", "rf")).lower()
     is_mixed = model_type in {"mixed_rf", "mixed"}
     mixed_group_by = str(cfg["ml_arguments"].get("mixed_group_by", "grid_id")).lower()
-    is_knn_mixed = is_mixed and mixed_group_by in {"knn_spatial", "knn_feature"}
+    is_knn_mixed = is_mixed and mixed_group_by in {"knn_spatial", "knn_feature", "knn_proximity"}
 
     (
         X_fit,

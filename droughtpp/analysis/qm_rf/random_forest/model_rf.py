@@ -391,11 +391,16 @@ class RandomForestBiasCorrector:
             )
 
             group_mode = str(mixed_group_by).lower()
-            if group_mode in {"knn_spatial", "knn_feature"}:
+            if group_mode in {"knn_spatial", "knn_feature", "knn_proximity"}:
                 n_iter = max(1, int(merf_n_iter))
                 tol = float(merf_tol)
                 random_effects = np.zeros(len(y), dtype=float)
-                knn_mode = "spatial" if group_mode == "knn_spatial" else "feature"
+                if group_mode == "knn_spatial":
+                    knn_mode = "spatial"
+                elif group_mode == "knn_feature":
+                    knn_mode = "feature"
+                else:
+                    knn_mode = "proximity"
                 n_iter_done = 0
                 knn_features_arr = np.asarray(knn_neighbor_features)
                 knn_features_val_arr = (
@@ -509,14 +514,20 @@ class RandomForestBiasCorrector:
 
                     knn_model = best_model
 
-                    _, updated_random_effects, _ = knn_model.predict_components(
-                        X.values,
-                        knn_features_arr,
-                    )
+                    if knn_mode == "proximity":
+                        _, updated_random_effects, _ = knn_model.predict_components(
+                            X.values,
+                            None,
+                        )
+                    else:
+                        _, updated_random_effects, _ = knn_model.predict_components(
+                            X.values,
+                            knn_features_arr,
+                        )
                     iter_diag = analyze_merf_contributions(
                         knn_model,
                         X.values,
-                        knn_features_arr,
+                        None if knn_mode == "proximity" else knn_features_arr,
                         y.values,
                     )
                     if iter_diag is not None:

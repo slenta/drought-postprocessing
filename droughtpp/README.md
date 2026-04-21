@@ -50,7 +50,7 @@ Key groups used by the pipeline:
   - `workflow.run_rf_train`
   - `workflow.run_rf_evaluate`
 - **QM parameters**
-  - `n_quantiles`, `qm_output_dir`, `plot_dir`
+  - `n_quantiles`, `plot_dir`
 - **RF parameters**
   - `n_estimators`, `chunk_size`, `random_state`
 - **SPEI options**
