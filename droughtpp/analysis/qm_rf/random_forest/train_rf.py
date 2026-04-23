@@ -5,7 +5,6 @@ from typing import List
 import numpy as np
 import pandas as pd
 import xarray as xr
-import matplotlib.pyplot as plt
 from joblib import dump
 from IPython import embed
 from sklearn.model_selection import train_test_split
@@ -13,8 +12,8 @@ from sklearn.model_selection import train_test_split
 from .model_rf import (
     RandomForestBiasCorrector,
     MixedEffectsTreeRegressor,
+    BLUPMixedEffectsRegressor,
     analyze_merf_contributions,
-    save_merf_diagnostics_plot,
 )
 from .knn_random_effects import LocalKNNRandomEffectsRegressor
 from .features import RFFeatureBuilder
@@ -24,37 +23,11 @@ from droughtpp.analysis.qm_rf.utils.evaluation import (
     build_mixed_group_labels,
     compute_threshold_grid_from_reference,
 )
-from droughtpp.analysis.qm_rf.utils.visualization import plot_feature_importance_table
-
-
-def plot_training_curve(training_history: dict, out_path: Path):
-    if not training_history:
-        return
-
-    x_vals = training_history.get("x", [])
-    train_vals = training_history.get("train", [])
-    val_vals = training_history.get("val", None)
-    metric = str(training_history.get("metric", "metric")).upper()
-    model_type = str(training_history.get("model_type", "model"))
-
-    if len(x_vals) == 0 or len(train_vals) == 0:
-        return
-
-    plt.figure(figsize=(8, 5))
-    plt.plot(x_vals, train_vals, label="train", linewidth=2)
-    if val_vals is not None and len(val_vals) == len(x_vals):
-        plt.plot(x_vals, val_vals, label="validation", linewidth=2)
-
-    x_label = "n_trees" if model_type == "rf" else "boosting_round"
-    plt.xlabel(x_label)
-    plt.ylabel(metric)
-    plt.title(f"{model_type.upper()} train/validation {metric}")
-    plt.grid(alpha=0.3)
-    plt.legend()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=160)
-    plt.close()
+from droughtpp.analysis.qm_rf.utils.visualization import (
+    plot_feature_importance_table,
+    plot_training_curve,
+    save_merf_diagnostics_plot,
+)
 
 
 def _append_train_block(
@@ -311,9 +284,6 @@ def _split_train_and_val(
         else:
             train_mask = ~val_mask
 
-        if not np.any(train_mask):
-            raise ValueError("No training samples remain after year-based split.")
-
         X_fit = X_train.loc[train_mask].reset_index(drop=True)
         y_fit = y_train.loc[train_mask].reset_index(drop=True)
         groups_fit = np.asarray(groups_train)[train_mask]
@@ -326,10 +296,6 @@ def _split_train_and_val(
             X_val, y_val, groups_val = None, None, None
 
         if is_knn_mixed:
-            if knn_features_train is None:
-                raise ValueError(
-                    "knn_features_train is required for KNN mixed training"
-                )
             knn_fit = np.asarray(knn_features_train)[train_mask]
             knn_val = (
                 np.asarray(knn_features_train)[val_mask] if np.any(val_mask) else None
@@ -342,10 +308,6 @@ def _split_train_and_val(
     val_fraction = float(ml_args.get("val_fraction", 0.2))
     if 0.0 < val_fraction < 1.0 and len(y_train) > 10:
         if is_knn_mixed:
-            if knn_features_train is None:
-                raise ValueError(
-                    "knn_features_train is required for KNN mixed training"
-                )
             (
                 X_fit,
                 X_val,
@@ -760,7 +722,11 @@ def train_and_save_model(
     model_type = str(cfg["ml_arguments"].get("model_type", "rf")).lower()
     is_mixed = model_type in {"mixed_rf", "mixed"}
     mixed_group_by = str(cfg["ml_arguments"].get("mixed_group_by", "grid_id")).lower()
-    is_knn_mixed = is_mixed and mixed_group_by in {"knn_spatial", "knn_feature", "knn_proximity"}
+    is_knn_mixed = is_mixed and mixed_group_by in {
+        "knn_spatial",
+        "knn_feature",
+        "knn_proximity",
+    }
 
     (
         X_fit,
@@ -781,7 +747,7 @@ def train_and_save_model(
         knn_features_train,
     )
 
-    model = rf.train_with_eta(
+    model = rf.train(
         X=X_fit,
         y=y_fit,
         X_val=X_val,
@@ -815,6 +781,13 @@ def train_and_save_model(
         tune_knn_eps_values=cfg["ml_arguments"].get("tune_knn_eps_values", None),
         merf_n_iter=cfg["ml_arguments"].get("merf_n_iter", 1),
         merf_tol=cfg["ml_arguments"].get("merf_tol", 1e-6),
+        mixed_effects_impl=cfg["ml_arguments"].get("mixed_effects_impl", "blup"),
+        mixed_likelihood_target=cfg["ml_arguments"].get(
+            "mixed_likelihood_target", "reml"
+        ),
+        variance_max_iter=cfg["ml_arguments"].get("variance_max_iter", 25),
+        variance_tol=cfg["ml_arguments"].get("variance_tol", 1e-6),
+        variance_floor=cfg["ml_arguments"].get("variance_floor", 1e-8),
         xgb_early_stopping_rounds=cfg["ml_arguments"].get(
             "xgb_early_stopping_rounds", None
         ),
@@ -839,10 +812,21 @@ def train_and_save_model(
 
     # Print mixed-model diagnostics for MERF and KNN mixed variants.
     if is_mixed and isinstance(
-        model, (MixedEffectsTreeRegressor, LocalKNNRandomEffectsRegressor)
+        model,
+        (
+            MixedEffectsTreeRegressor,
+            BLUPMixedEffectsRegressor,
+            LocalKNNRandomEffectsRegressor,
+        ),
     ):
         diag_groups = (
-            knn_fit if isinstance(model, LocalKNNRandomEffectsRegressor) else groups_fit
+            knn_fit
+            if isinstance(model, LocalKNNRandomEffectsRegressor)
+            or (
+                isinstance(model, BLUPMixedEffectsRegressor)
+                and str(getattr(model, "mode", "")).lower() == "knn"
+            )
+            else groups_fit
         )
         diagnostics = analyze_merf_contributions(
             model,

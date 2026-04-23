@@ -179,8 +179,6 @@ class RFFeatureBuilder:
 
         valid_spatial = (lat_indices >= 0) & (lon_indices >= 0)
 
-
-
         additional_lag_features = {}
         for feature in self.additional_reference_features:
             feature_name = feature["name"]
@@ -271,8 +269,6 @@ class RFFeatureBuilder:
         if self.feature_flags["use_lead_month"]:
             feature_columns["lead_month"] = lead_months
 
-
-
         features = pd.DataFrame(index=np.arange(n_samples))
         if feature_columns:
             features = pd.concat([features, pd.DataFrame(feature_columns)], axis=1)
@@ -280,8 +276,5 @@ class RFFeatureBuilder:
             features = pd.concat(
                 [features, pd.DataFrame(additional_lag_features)], axis=1
             )
-
-        if features.shape[1] == 0:
-            raise ValueError("No ML features enabled. Check feature_flags in config.")
 
         return features, years

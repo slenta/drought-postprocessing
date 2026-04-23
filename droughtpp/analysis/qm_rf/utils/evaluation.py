@@ -14,7 +14,9 @@ from droughtpp.evaluation.evaluation import (
 )
 from droughtpp.analysis.qm_rf.utils.visualization import (
     plot_bss_skill_metrics,
+    plot_event_bss_comparison_maps,
     plot_mae_skill_metrics,
+    plot_qm_distributions,
     plot_ensemble_timeseries,
     plot_ml_eval_summary_maps,
     plot_example_time_means,
@@ -62,6 +64,45 @@ def compute_qm_distributions(
         }
 
     return dist_by_hind
+
+
+def compute_pairwise_distributions(
+    baseline_ensemble,
+    primary_ensemble,
+    reference,
+    qm_ensemble=None,
+):
+    """
+    Build flattened per-member distributions for histogram comparison plots.
+
+    Args:
+        baseline_ensemble: np.ndarray (time, member, lat, lon)
+        primary_ensemble: np.ndarray (time, member, lat, lon)
+        reference: np.ndarray (time, lat, lon)
+        qm_ensemble: optional np.ndarray (time, member, lat, lon)
+
+    Returns:
+        dict keyed by member name with entries containing orig, corrected, obs,
+        and optionally qm arrays.
+    """
+    baseline_np = np.asarray(baseline_ensemble)
+    primary_np = np.asarray(primary_ensemble)
+    reference_np = np.asarray(reference)
+    qm_np = np.asarray(qm_ensemble) if qm_ensemble is not None else None
+
+    n_members = baseline_np.shape[1]
+    dist_by_member = {}
+    for i in range(n_members):
+        entry = {
+            "orig": baseline_np[:, i, :, :].ravel(),
+            "corrected": primary_np[:, i, :, :].ravel(),
+            "obs": reference_np.ravel(),
+        }
+        if qm_np is not None and i < qm_np.shape[1]:
+            entry["qm"] = qm_np[:, i, :, :].ravel()
+        dist_by_member[f"member_{i:02d}"] = entry
+
+    return dist_by_member
 
 
 def load_paths_from_json(json_path: Path) -> list[Path]:
@@ -578,6 +619,20 @@ def prepare_pairwise_skill_evaluation(
             std_multiplier=-1.0,
             extreme_type="lower",
         )
+        result["bss_qm_vs_secondary_upper"], _, _ = brier_skill_score_between_ensembles(
+            qm_np,
+            secondary_np,
+            reference_np,
+            std_multiplier=1.0,
+            extreme_type="upper",
+        )
+        result["bss_qm_vs_secondary_lower"], _, _ = brier_skill_score_between_ensembles(
+            qm_np,
+            secondary_np,
+            reference_np,
+            std_multiplier=-1.0,
+            extreme_type="lower",
+        )
 
     return result
 
@@ -602,6 +657,37 @@ def plot_pairwise_skill_evaluation(
     mean_bias_qm_member = skill.get("mean_bias_qm_member")
     qm_ensemble = skill.get("qm_ensemble")
     qm_np = skill.get("qm_np")
+
+    mae_reference_member = np.zeros_like(skill["mae_secondary_member"])
+    rmse_reference_member = np.zeros_like(skill["rmse_secondary_member"])
+    mean_bias_reference_member = np.zeros_like(skill["mean_bias_secondary_member"])
+
+    distributions = compute_pairwise_distributions(
+        baseline_ensemble=skill["secondary_np"],
+        primary_ensemble=skill["primary_np"],
+        reference=skill["reference_np"],
+        qm_ensemble=qm_np,
+    )
+    if qm_np is not None:
+        plot_qm_distributions(
+            distributions,
+            var_name=variable_name if variable_name is not None else "variable",
+            out_dir=str(plot_dir),
+            series_keys=("orig", "qm", "corrected", "obs"),
+            series_labels=("Original", "QM", "RF-corrected", "Reference"),
+            title_tag="Original vs QM vs RF-corrected vs reference",
+            file_prefix="ensemble_mean_rf_distribution",
+        )
+    else:
+        plot_qm_distributions(
+            distributions,
+            var_name=variable_name if variable_name is not None else "variable",
+            out_dir=str(plot_dir),
+            series_keys=("orig", "corrected", "obs"),
+            series_labels=("Original", "RF-corrected", "Reference"),
+            title_tag="Original vs RF-corrected vs reference",
+            file_prefix="ensemble_mean_rf_distribution",
+        )
 
     plot_mae_skill_metrics(
         skill["mae_secondary_member"],
@@ -666,6 +752,26 @@ def plot_pairwise_skill_evaluation(
                 upper_threshold_label="mean + 1σ",
                 lower_threshold_label="mean - 1σ",
                 title_prefix="RF vs QM",
+                land_mask_path=land_mask_path,
+            )
+
+        if skill.get("bss_qm_vs_secondary_upper") is not None:
+            plot_event_bss_comparison_maps(
+                bss_qm_vs_orig=skill["bss_qm_vs_secondary_upper"],
+                bss_ml_vs_orig=skill["bss_upper"],
+                bss_ml_vs_qm=skill["bss_primary_vs_qm_upper"],
+                out_dir=str(plot_dir),
+                threshold_label="Upper tail (mean + 1σ)",
+                file_prefix="bss_comparison_upper",
+                land_mask_path=land_mask_path,
+            )
+            plot_event_bss_comparison_maps(
+                bss_qm_vs_orig=skill["bss_qm_vs_secondary_lower"],
+                bss_ml_vs_orig=skill["bss_lower"],
+                bss_ml_vs_qm=skill["bss_primary_vs_qm_lower"],
+                out_dir=str(plot_dir),
+                threshold_label="Lower tail (mean - 1σ)",
+                file_prefix="bss_comparison_lower",
                 land_mask_path=land_mask_path,
             )
 

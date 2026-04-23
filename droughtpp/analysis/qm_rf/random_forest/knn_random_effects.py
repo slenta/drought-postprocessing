@@ -33,18 +33,13 @@ class LocalKNNRandomEffectsRegressor:
             "gauss": "gaussian",
             "gaussian": "gaussian",
         }
-        if weighting_norm not in aliases:
-            raise ValueError(
-                "Unsupported KNN weighting. Use one of: "
-                "inverse_distance, exponential, gaussian"
-            )
 
         self.base_model = base_model
         self.mode = mode
         self.k = int(k)
         self.metric = str(metric)
         self.eps = float(eps)
-        self.weighting = aliases[weighting_norm]
+        self.weighting = aliases.get(weighting_norm, "inverse_distance")
         self.gaussian_sigma = (
             None if gaussian_sigma is None else max(float(gaussian_sigma), self.eps)
         )

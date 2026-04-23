@@ -134,7 +134,6 @@ def compute_qm_skill_metrics(
         return da.assign_coords(time=da["time"].values.astype("datetime64[D]"))
 
     ref_subset = _normalize_time_to_date(ref_subset)
-    print(land_mask_path)
 
     # Stack ensemble members from the list of DataArrays
     original_ensemble = []
@@ -274,6 +273,7 @@ def compute_qm_skill_metrics(
         out_dir=plot_dir,
         upper_threshold_label="mean + 1σ",
         lower_threshold_label="mean - 1σ",
+        title_prefix="QM vs Original",
         land_mask_path=land_mask_path,
     )
 

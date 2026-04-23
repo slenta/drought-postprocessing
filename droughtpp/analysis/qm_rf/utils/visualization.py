@@ -1,9 +1,11 @@
 import os
+import typing as _t
 from pathlib import Path
 from IPython import embed
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import xarray as xr
 
 
@@ -22,6 +24,10 @@ def plot_qm_distributions(
     n_quantiles=200,
     figsize=(8, 6),
     bins=250,
+    series_keys=("orig", "qm", "obs"),
+    series_labels=("original", "quantile-mapped", "reference"),
+    title_tag="QM vs obs",
+    file_prefix="ensemble_mean_qm_distribution",
 ):
     """
     distributions: dict produced by compute_qm_distributions()
@@ -29,20 +35,25 @@ def plot_qm_distributions(
     Returns list of written file paths.
     """
     out_paths = []
-    hind, qm = [], []
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
-    for key, d in distributions.items():
-        orig_vals = d["orig"]
-        qm_vals = d["qm"]
-        obs_vals = d["obs"]
-        hind.append(orig_vals)
-        qm.append(qm_vals)
+    series_values = {k: [] for k in series_keys}
+    for _, d in distributions.items():
+        for series_key in series_keys:
+            if series_key in d:
+                series_values[series_key].append(d[series_key])
 
-    qm_mean = np.mean(qm, axis=0)
-    orig_mean = np.mean(hind, axis=0)
-    x_min = min(orig_mean.min(), qm_mean.min())
-    x_max = max(orig_mean.max(), qm_mean.max())
+    missing = [k for k in series_keys if len(series_values[k]) == 0]
+    if missing:
+        raise ValueError(
+            f"Missing distribution series for keys: {missing}. "
+            f"Available keys: {list(next(iter(distributions.values())).keys()) if distributions else []}"
+        )
+
+    series_means = {key: np.mean(series_values[key], axis=0) for key in series_keys}
+    all_means = np.concatenate([arr.ravel() for arr in series_means.values()])
+    x_min = float(np.nanmin(all_means))
+    x_max = float(np.nanmax(all_means))
     bins = np.linspace(x_min, x_max, bins)
 
     # for key, d in distributions.items():
@@ -66,16 +77,21 @@ def plot_qm_distributions(
     #     plt.close()
 
     plt.figure(figsize=figsize)
-    plt.hist(orig_mean, bins=bins, density=True, alpha=0.45, label="original")
-    plt.hist(qm_mean, bins=bins, density=True, alpha=0.45, label="quantile-mapped")
-    plt.hist(obs_vals, bins=bins, density=True, alpha=0.45, label="reference")
+    for series_key, series_label in zip(series_keys, series_labels):
+        plt.hist(
+            series_means[series_key],
+            bins=bins,
+            density=True,
+            alpha=0.45,
+            label=series_label,
+        )
     plt.legend()
-    plt.title(f"Ensemble Mean — {var_name} distribution (QM vs obs)")
+    plt.title(f"Ensemble Mean — {var_name} distribution ({title_tag})")
     plt.xlabel(var_name)
     plt.xlim(x_min, x_max)
     plt.ylabel("density")
 
-    out_png = Path(out_dir) / f"ensemble_mean_qm_distribution_n{n_quantiles}.png"
+    out_png = Path(out_dir) / f"{file_prefix}_n{n_quantiles}.png"
     plt.savefig(str(out_png), bbox_inches="tight")
     out_paths.append(str(out_png))
     plt.close()
@@ -92,6 +108,11 @@ def plot_mae_skill_metrics(
     metric_name="MAE",
     file_prefix=None,
     land_mask_path=None,
+    original_label="Original",
+    corrected_label="RF-corrected",
+    qm_label="QM",
+    reference_label="Reference",
+    show_qm_before_corrected=False,
 ):
     """
     Plot skill metrics comparing original, corrected (RF), and optionally QM hindcasts.
@@ -1343,3 +1364,173 @@ def plot_ml_eval_summary_maps(
     plt.close()
 
     return out_paths
+
+
+def plot_training_curve(training_history: dict, out_path: Path):
+    x_vals = training_history.get("x", [])
+    train_vals = training_history.get("train", [])
+    val_vals = training_history.get("val", None)
+    metric = str(training_history.get("metric", "metric")).upper()
+    model_type = str(training_history.get("model_type", "model"))
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(x_vals, train_vals, label="train", linewidth=2)
+    if val_vals is not None and len(val_vals) == len(x_vals):
+        plt.plot(x_vals, val_vals, label="validation", linewidth=2)
+
+    x_label = "n_trees" if model_type == "rf" else "boosting_round"
+    plt.xlabel(x_label)
+    plt.ylabel(metric)
+    plt.title(f"{model_type.upper()} train/validation {metric}")
+    plt.grid(alpha=0.3)
+    plt.legend()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=160)
+    plt.close()
+
+
+def save_merf_diagnostics_plot(
+    diagnostics: dict,
+    output_path: _t.Union[str, Path],
+    decimals: int = 4,
+    figsize: tuple = (14, 10),
+):
+    if diagnostics is None:
+        return
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fmt = f".{decimals}f"
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.axis("off")
+
+    table_data = []
+    table_data.append(["MERF Diagnostics", ""])
+    table_data.append(["", ""])
+
+    table_data.append(["Group Effects Statistics", ""])
+    n_groups = diagnostics["random_stats"]["n_groups"]
+    table_data.append([f"  Number of Groups", f"{n_groups}"])
+    table_data.append(
+        [f"  Mean Effect", f"{diagnostics['random_stats']['mean']:{fmt}}"]
+    )
+    table_data.append([f"  Std Dev", f"{diagnostics['random_stats']['std']:{fmt}}"])
+    table_data.append([f"  Min Effect", f"{diagnostics['random_stats']['min']:{fmt}}"])
+    table_data.append([f"  Max Effect", f"{diagnostics['random_stats']['max']:{fmt}}"])
+    table_data.append([f"  Range", f"{diagnostics['random_stats']['range']:{fmt}}"])
+    table_data.append(
+        [f"  % Non-zero Samples", f"{diagnostics['random_stats']['pct_nonzero']:.1f}%"]
+    )
+    table_data.append(["", ""])
+
+    table_data.append(["Base (Fixed) Term Statistics", ""])
+    table_data.append([f"  Mean", f"{diagnostics['base_stats']['mean']:{fmt}}"])
+    table_data.append([f"  Std Dev", f"{diagnostics['base_stats']['std']:{fmt}}"])
+    table_data.append([f"  Min", f"{diagnostics['base_stats']['min']:{fmt}}"])
+    table_data.append([f"  Max", f"{diagnostics['base_stats']['max']:{fmt}}"])
+    table_data.append([f"  Range", f"{diagnostics['base_stats']['range']:{fmt}}"])
+    table_data.append(["", ""])
+
+    table_data.append(["Contribution Analysis", ""])
+    table_data.append(
+        [
+            f"  Avg Group Effect %",
+            f"{diagnostics['contribution_ratio_groups']*100:.1f}%",
+        ]
+    )
+    table_data.append(
+        [f"  Max Group Effect %", f"{diagnostics['max_contribution_ratio']*100:.1f}%"]
+    )
+    table_data.append(["", ""])
+
+    if "base_rmse" in diagnostics:
+        table_data.append(["Error Metrics (Validation Set)", ""])
+        table_data.append([f"  Base Model RMSE", f"{diagnostics['base_rmse']:{fmt}}"])
+        table_data.append(
+            [f"  MERF Model RMSE", f"{diagnostics['combined_rmse']:{fmt}}"]
+        )
+        table_data.append(
+            [f"  RMSE Improvement", f"{diagnostics['rmse_improvement']:{fmt}}"]
+        )
+        if abs(diagnostics["rmse_improvement"]) > 1e-6:
+            pct = (diagnostics["rmse_improvement"] / diagnostics["base_rmse"]) * 100
+            table_data.append([f"  % Improvement", f"{pct:.1f}%"])
+        table_data.append(["", ""])
+
+    table = ax.table(
+        cellText=table_data,
+        cellLoc="left",
+        loc="upper left",
+        colWidths=[0.6, 0.4],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 2)
+
+    for i in [0, 2, 9, 12, 15]:
+        if i < len(table_data):
+            table[(i, 0)].set_facecolor("#4472C4")
+            table[(i, 0)].set_text_props(weight="bold", color="white")
+            table[(i, 1)].set_facecolor("#4472C4")
+            table[(i, 1)].set_text_props(weight="bold", color="white")
+
+    for i, row in enumerate(table_data):
+        if i not in [0, 2, 9, 12, 15, 1] and row != ["", ""]:
+            if i % 2 == 0:
+                table[(i, 0)].set_facecolor("#E8F0F8")
+                table[(i, 1)].set_facecolor("#E8F0F8")
+
+    plt.tight_layout()
+    plt.savefig(str(output_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    if "group_effects_df" in diagnostics:
+        top_groups_path = output_path.parent / f"{output_path.stem}_top_groups.png"
+        _save_group_effects_table(
+            diagnostics["group_effects_df"], top_groups_path, decimals
+        )
+
+
+def _save_group_effects_table(
+    group_effects_df: pd.DataFrame,
+    output_path: _t.Union[str, Path],
+    decimals: int = 4,
+    n_top: int = 15,
+):
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    df_top = group_effects_df.head(n_top).copy()
+    df_top.columns = ["Group", "Effect"]
+    df_top["Effect"] = df_top["Effect"].apply(lambda x: f"{x:.{decimals}f}")
+
+    fig, ax = plt.subplots(figsize=(10, max(6, n_top * 0.4)))
+    ax.axis("off")
+
+    table_data = [["Group ID", "Effect"]] + df_top.values.tolist()
+
+    table = ax.table(
+        cellText=table_data,
+        cellLoc="center",
+        loc="center",
+        colWidths=[0.7, 0.3],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 2)
+
+    for i in range(2):
+        table[(0, i)].set_facecolor("#4472C4")
+        table[(0, i)].set_text_props(weight="bold", color="white")
+
+    for i in range(1, len(table_data)):
+        if i % 2 == 0:
+            table[(i, 0)].set_facecolor("#E8F0F8")
+            table[(i, 1)].set_facecolor("#E8F0F8")
+
+    plt.title(f"Top {n_top} Group Effects", fontsize=12, fontweight="bold", pad=20)
+    plt.tight_layout()
+    plt.savefig(str(output_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)

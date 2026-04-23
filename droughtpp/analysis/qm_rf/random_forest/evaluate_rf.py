@@ -14,8 +14,8 @@ from cmethods import adjust
 from .model_rf import (
     RandomForestBiasCorrector,
     MixedEffectsTreeRegressor,
+    BLUPMixedEffectsRegressor,
     analyze_merf_contributions,
-    save_merf_diagnostics_plot,
 )
 from .knn_random_effects import LocalKNNRandomEffectsRegressor
 from .features import RFFeatureBuilder
@@ -23,7 +23,10 @@ from ..config_loader import get_qm_rf_global_config
 from droughtpp.analysis.qm_rf.utils.spei_evaluation import evaluate_spei
 from droughtpp.analysis.qm_rf.utils.cwb_evaluation import evaluate_cwb
 from droughtpp.analysis.qm_rf.utils.intensity_evaluation import evaluate_intensity
-from droughtpp.analysis.qm_rf.utils.visualization import plot_feature_importance_table
+from droughtpp.analysis.qm_rf.utils.visualization import (
+    plot_feature_importance_table,
+    save_merf_diagnostics_plot,
+)
 from droughtpp.analysis.qm_rf.utils.spei_from_rf import (
     combine_qm_and_residuals,
     compute_spei_from_rf_corrected,
@@ -32,6 +35,15 @@ from droughtpp.analysis.qm_rf.utils.evaluation import (
     build_knn_neighbor_features,
     build_mixed_group_labels,
 )
+
+
+def _is_knn_mixed_model(model) -> bool:
+    if isinstance(model, LocalKNNRandomEffectsRegressor):
+        return True
+    return (
+        isinstance(model, BLUPMixedEffectsRegressor)
+        and str(getattr(model, "mode", "")).lower() == "knn"
+    )
 
 
 def _append_eval_block(
@@ -259,7 +271,7 @@ def save_predicted_residuals(
         preds_array = np.full(X_pred.shape[0], np.nan, dtype=float)
         if eval_mask.any():
             if str(model_type).lower() in {"mixed_rf", "mixed"}:
-                if isinstance(model, LocalKNNRandomEffectsRegressor):
+                if _is_knn_mixed_model(model):
                     preds_array[eval_mask] = model.predict(
                         X_pred.values[eval_mask],
                         neighbor_features=knn_pred[eval_mask],
@@ -393,7 +405,7 @@ def save_predicted_residuals(
             preds_array = np.full(X_pred.shape[0], np.nan, dtype=float)
             if eval_mask.any():
                 if str(model_type).lower() in {"mixed_rf", "mixed"}:
-                    if isinstance(model, LocalKNNRandomEffectsRegressor):
+                    if _is_knn_mixed_model(model):
                         preds_array[eval_mask] = model.predict(
                             X_pred.values[eval_mask],
                             neighbor_features=knn_pred[eval_mask],
@@ -539,7 +551,7 @@ def save_predicted_event_probabilities(
         preds_array = np.full(X_pred.shape[0], np.nan, dtype=float)
         if eval_mask.any():
             if str(model_type).lower() in {"mixed_rf", "mixed"}:
-                if isinstance(model, LocalKNNRandomEffectsRegressor):
+                if _is_knn_mixed_model(model):
                     preds_array[eval_mask] = model.predict(
                         X_pred.values[eval_mask],
                         neighbor_features=knn_pred[eval_mask],
@@ -616,7 +628,7 @@ def save_predicted_event_probabilities(
             preds_array = np.full(X_pred.shape[0], np.nan, dtype=float)
             if eval_mask.any():
                 if str(model_type).lower() in {"mixed_rf", "mixed"}:
-                    if isinstance(model, LocalKNNRandomEffectsRegressor):
+                    if _is_knn_mixed_model(model):
                         preds_array[eval_mask] = model.predict(
                             X_pred.values[eval_mask],
                             neighbor_features=knn_pred[eval_mask],
@@ -696,9 +708,7 @@ def apply_post_qm_from_val_years(
                 val_da["time"].values,
             )
             if common_val_time.size == 0:
-                raise ValueError(
-                    f"No overlapping val-year timestamps between reference and {val_path}"
-                )
+                continue
 
             ref_cal = ref_da.sel(time=common_val_time)
             simh_cal = val_da.sel(time=common_val_time)
@@ -879,13 +889,14 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
 
             # Print mixed-model diagnostics for MERF and KNN mixed variants.
             if isinstance(
-                model, (MixedEffectsTreeRegressor, LocalKNNRandomEffectsRegressor)
+                model,
+                (
+                    MixedEffectsTreeRegressor,
+                    BLUPMixedEffectsRegressor,
+                    LocalKNNRandomEffectsRegressor,
+                ),
             ):
-                diag_groups = (
-                    knn_eval
-                    if isinstance(model, LocalKNNRandomEffectsRegressor)
-                    else groups_eval
-                )
+                diag_groups = knn_eval if _is_knn_mixed_model(model) else groups_eval
                 diagnostics = analyze_merf_contributions(
                     model,
                     X_eval.values,

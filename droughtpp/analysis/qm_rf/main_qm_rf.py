@@ -8,6 +8,16 @@ from .random_forest.train_rf import train as rf_train
 from .quantile_mapping.evaluate_qm import run_qm_evaluation
 
 
+def _make_leave_one_out_overrides(cfg, held_out_year: int):
+    base_tag = str(cfg["rf_results_tag"])
+    year_tag = f"{base_tag}/year{int(held_out_year)}"
+    return [
+        f"leave_out_years={[int(held_out_year)]}",
+        f"ml_arguments.split_years.test={[int(held_out_year)]}",
+        f"rf_results_tag={year_tag}",
+    ]
+
+
 def run_qm_then_rf(
     config_path: str | None = None,
     train_rf: bool = False,
@@ -39,8 +49,25 @@ def run_qm_then_rf(
 
     if qm_eval:
         run_qm_evaluation()
+        full_timeline = cfg.get("workflow", {}).get("run_leave_one_out_timeline", False)
 
-    # run RF training and evaluation if requested
+    if full_timeline == True:
+        leave_out_years = [int(year) for year in cfg.get("leave_out_years", [])]
+        for held_out_year in range(leave_out_years[0], leave_out_years[1] + 1):
+            overrides = _make_leave_one_out_overrides(cfg, held_out_year)
+
+            if train_rf:
+                rf_train(config_overrides=overrides)
+
+            if (
+                run_rf_evaluate
+                or cfg["workflow"].get("evaluate_cwb", False)
+                or cfg["workflow"].get("evaluate_intensity", False)
+                or cfg["workflow"].get("evaluate_spei", False)
+            ):
+                rf_evaluate(config_overrides=overrides)
+        return
+
     if train_rf:
         rf_train()
 

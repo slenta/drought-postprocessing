@@ -5,10 +5,15 @@ import pandas as pd
 import time
 from tqdm import tqdm
 from pathlib import Path
-import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from .knn_random_effects import LocalKNNRandomEffectsRegressor
+from .BLUP_random_effects import (
+    BLUPMixedEffectsRegressor,
+    compute_group_blup_random_effects,
+    compute_knn_blup_random_effects,
+    estimate_variance_components_iterative,
+)
 
 
 class MixedEffectsTreeRegressor:
@@ -73,6 +78,7 @@ class RandomForestBiasCorrector:
                 XGBRegressor,
                 MixedEffectsTreeRegressor,
                 LocalKNNRandomEffectsRegressor,
+                BLUPMixedEffectsRegressor,
             ]
         ] = None
         self.training_history: _t.Optional[dict] = None
@@ -305,21 +311,6 @@ class RandomForestBiasCorrector:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        n_estimators: int = 100,
-        random_state: int = 0,
-    ) -> RandomForestRegressor:
-        """Train and store a RandomForestRegressor."""
-        rf = RandomForestRegressor(
-            n_estimators=n_estimators, random_state=random_state, n_jobs=-1
-        )
-        rf.fit(X.values, y.values)
-        self.model = rf
-        return rf
-
-    def train_with_eta(
-        self,
-        X: pd.DataFrame,
-        y: pd.Series,
         X_val: _t.Optional[pd.DataFrame] = None,
         y_val: _t.Optional[pd.Series] = None,
         groups: _t.Optional[_t.Sequence[_t.Any]] = None,
@@ -351,6 +342,11 @@ class RandomForestBiasCorrector:
         tune_knn_eps_values: _t.Optional[_t.Sequence[float]] = None,
         merf_n_iter: int = 1,
         merf_tol: float = 1e-6,
+        mixed_effects_impl: str = "blup",
+        mixed_likelihood_target: str = "reml",
+        variance_max_iter: int = 25,
+        variance_tol: float = 1e-6,
+        variance_floor: float = 1e-8,
         xgb_early_stopping_rounds: _t.Optional[int] = None,
         rf_early_stopping_patience: int = 0,
         rf_early_stopping_min_delta: float = 0.0,
@@ -359,6 +355,7 @@ class RandomForestBiasCorrector:
         XGBRegressor,
         MixedEffectsTreeRegressor,
         LocalKNNRandomEffectsRegressor,
+        BLUPMixedEffectsRegressor,
     ]:
 
         model_type = str(model_type).lower()
@@ -384,6 +381,7 @@ class RandomForestBiasCorrector:
         if model_type in {"mixed_rf", "mixed"}:
 
             mixed_base = str(mixed_base_model).lower()
+            mixed_impl = str(mixed_effects_impl).lower().strip()
             shrinkage_candidates = (
                 [float(v) for v in re_shrinkage_grid]
                 if re_shrinkage_grid is not None and len(re_shrinkage_grid) > 0
@@ -395,6 +393,8 @@ class RandomForestBiasCorrector:
                 n_iter = max(1, int(merf_n_iter))
                 tol = float(merf_tol)
                 random_effects = np.zeros(len(y), dtype=float)
+                sigma_b2 = 1.0
+                sigma_e2 = 1.0
                 if group_mode == "knn_spatial":
                     knn_mode = "spatial"
                 elif group_mode == "knn_feature":
@@ -424,6 +424,7 @@ class RandomForestBiasCorrector:
                     "eps": float(knn_eps),
                     "shrinkage": float(shrinkage_candidates[0]),
                 }
+                knn_model = None
 
                 for _ in range(n_iter):
                     n_iter_done += 1
@@ -465,77 +466,224 @@ class RandomForestBiasCorrector:
                             rf_early_stopping_min_delta,
                         )
 
+                    fixed_train = np.asarray(base_model.predict(X.values), dtype=float)
+                    residuals_train = np.asarray(y.values - fixed_train, dtype=float)
+
                     best_score = np.inf
-                    best_model = None
+                    best_random_effects = None
+                    best_candidate_nn = None
+                    best_n_neighbors = int(knn_k)
+                    best_sigma_b2 = float(sigma_b2)
+                    best_sigma_e2 = float(sigma_e2)
+                    best_ll = float("-inf")
+                    best_basic_model = None
+                    fixed_val = None
+                    blup_candidate_cache = {}
+                    if mixed_impl != "basic":
+                        fixed_val = np.asarray(
+                            base_model.predict(X_val.values), dtype=float
+                        )
                     for alpha in shrinkage_candidates:
                         for cand_k in k_candidates:
                             for cand_eps in eps_candidates:
-                                candidate_model = LocalKNNRandomEffectsRegressor(
-                                    base_model=base_model,
-                                    mode=knn_mode,
-                                    k=int(cand_k),
-                                    metric=knn_metric,
-                                    eps=float(cand_eps),
-                                    weighting=knn_weighting,
-                                    gaussian_sigma=knn_gaussian_sigma,
-                                    random_effect_shrinkage=float(alpha),
-                                )
-                                candidate_model.fit(
-                                    X_train=X.values,
-                                    y_train=y.values,
-                                    neighbor_features_train=knn_features_arr,
-                                )
+                                if mixed_impl == "basic":
+                                    candidate_model = LocalKNNRandomEffectsRegressor(
+                                        base_model=base_model,
+                                        mode=knn_mode,
+                                        k=int(cand_k),
+                                        metric=knn_metric,
+                                        eps=float(cand_eps),
+                                        weighting=knn_weighting,
+                                        gaussian_sigma=knn_gaussian_sigma,
+                                        random_effect_shrinkage=float(alpha),
+                                    )
+                                    candidate_model.fit(
+                                        X_train=X.values,
+                                        y_train=y.values,
+                                        neighbor_features_train=knn_features_arr,
+                                    )
 
-                                if (
-                                    X_val is not None
-                                    and y_val is not None
-                                    and knn_features_val_arr is not None
-                                ):
                                     val_pred = candidate_model.predict(
                                         X_val.values,
                                         knn_features_val_arr,
                                     )
-                                    score = self._rmse(y_val.values, val_pred)
-                                else:
-                                    train_pred = candidate_model.predict(
-                                        X.values,
-                                        knn_features_arr,
+                                    rmse_score = self._rmse(y_val.values, val_pred)
+
+                                    score = rmse_score
+                                    ll_score = float("nan")
+                                    sigma_b2_new = float(sigma_b2)
+                                    sigma_e2_new = float(sigma_e2)
+                                    candidate_nn = getattr(candidate_model, "_nn", None)
+                                    n_neighbors_eff = int(
+                                        getattr(
+                                            candidate_model,
+                                            "_n_neighbors_effective",
+                                            cand_k,
+                                        )
                                     )
-                                    score = self._rmse(y.values, train_pred)
+                                else:
+                                    cache_key = (int(cand_k), float(cand_eps))
+                                    cache_entry = blup_candidate_cache.get(cache_key)
+                                    if cache_entry is None:
+                                        re_train_blup, candidate_nn, n_neighbors_eff = (
+                                            compute_knn_blup_random_effects(
+                                                residuals_train=residuals_train,
+                                                neighbor_features_train=knn_features_arr,
+                                                neighbor_features_query=knn_features_arr,
+                                                k=int(cand_k),
+                                                metric=knn_metric,
+                                                eps=float(cand_eps),
+                                                weighting=knn_weighting,
+                                                sigma_b2=max(
+                                                    float(sigma_b2),
+                                                    float(variance_floor),
+                                                ),
+                                                sigma_e2=max(
+                                                    float(sigma_e2),
+                                                    float(variance_floor),
+                                                ),
+                                                gaussian_sigma=knn_gaussian_sigma,
+                                            )
+                                        )
+                                        re_val_blup, _, _ = (
+                                            compute_knn_blup_random_effects(
+                                                residuals_train=residuals_train,
+                                                neighbor_features_train=knn_features_arr,
+                                                neighbor_features_query=knn_features_val_arr,
+                                                k=int(cand_k),
+                                                metric=knn_metric,
+                                                eps=float(cand_eps),
+                                                weighting=knn_weighting,
+                                                sigma_b2=max(
+                                                    float(sigma_b2),
+                                                    float(variance_floor),
+                                                ),
+                                                sigma_e2=max(
+                                                    float(sigma_e2),
+                                                    float(variance_floor),
+                                                ),
+                                                gaussian_sigma=knn_gaussian_sigma,
+                                            )
+                                        )
+                                        cache_entry = (
+                                            re_train_blup,
+                                            re_val_blup,
+                                            candidate_nn,
+                                            int(n_neighbors_eff),
+                                        )
+                                        blup_candidate_cache[cache_key] = cache_entry
+                                    (
+                                        re_train_blup,
+                                        re_val_blup,
+                                        candidate_nn,
+                                        n_neighbors_eff,
+                                    ) = cache_entry
+                                    re_train_alpha = float(alpha) * re_train_blup
+                                    sigma_b2_new = float(sigma_b2)
+                                    sigma_e2_new = float(sigma_e2)
+                                    ll_score = float("nan")
+
+                                    val_pred = fixed_val + float(alpha) * re_val_blup
+                                    rmse_score = self._rmse(y_val.values, val_pred)
+
+                                    score = rmse_score
 
                                 if score < best_score:
                                     best_score = score
-                                    best_model = candidate_model
+                                    if mixed_impl == "basic":
+                                        best_random_effects = None
+                                        best_basic_model = candidate_model
+                                    else:
+                                        best_random_effects = re_train_alpha
+                                    best_candidate_nn = candidate_nn
+                                    best_n_neighbors = int(n_neighbors_eff)
+                                    best_sigma_b2 = float(sigma_b2_new)
+                                    best_sigma_e2 = float(sigma_e2_new)
+                                    best_ll = float(ll_score)
                                     best_knn_cfg = {
                                         "k": int(cand_k),
                                         "eps": float(cand_eps),
                                         "shrinkage": float(alpha),
                                     }
 
-                    knn_model = best_model
-
-                    if knn_mode == "proximity":
-                        _, updated_random_effects, _ = knn_model.predict_components(
-                            X.values,
-                            None,
-                        )
+                    if mixed_impl == "basic":
+                        knn_model = best_basic_model
+                        if knn_mode == "proximity":
+                            _, updated_random_effects, _ = knn_model.predict_components(
+                                X.values,
+                                None,
+                            )
+                        else:
+                            _, updated_random_effects, _ = knn_model.predict_components(
+                                X.values,
+                                knn_features_arr,
+                            )
                     else:
-                        _, updated_random_effects, _ = knn_model.predict_components(
-                            X.values,
-                            knn_features_arr,
+                        updated_random_effects = np.asarray(
+                            best_random_effects, dtype=float
                         )
+                        sigma_b2, sigma_e2, var_hist = (
+                            estimate_variance_components_iterative(
+                                residuals=residuals_train,
+                                random_effects=updated_random_effects,
+                                objective=mixed_likelihood_target,
+                                n_fixed_effects=int(X.shape[1]),
+                                sigma_b2_init=max(
+                                    float(sigma_b2), float(variance_floor)
+                                ),
+                                sigma_e2_init=max(
+                                    float(sigma_e2), float(variance_floor)
+                                ),
+                                max_iter=int(variance_max_iter),
+                                tol=float(variance_tol),
+                                var_floor=float(variance_floor),
+                                groups=None,
+                                is_knn=True,
+                            )
+                        )
+                        best_ll = (
+                            float(var_hist[-1]["log_likelihood"])
+                            if len(var_hist) > 0
+                            else float("nan")
+                        )
+                        knn_model = BLUPMixedEffectsRegressor(
+                            base_model=base_model,
+                            mode="knn",
+                            group_by=mixed_group_by,
+                            sigma_b2=sigma_b2,
+                            sigma_e2=sigma_e2,
+                            knn_model=best_candidate_nn,
+                            knn_mode=knn_mode,
+                            knn_metric=knn_metric,
+                            knn_eps=float(best_knn_cfg["eps"]),
+                            knn_weighting=knn_weighting,
+                            knn_gaussian_sigma=knn_gaussian_sigma,
+                            knn_residuals_train=residuals_train,
+                            knn_neighbor_features_train=knn_features_arr,
+                            n_neighbors_effective=best_n_neighbors,
+                        )
+
                     iter_diag = analyze_merf_contributions(
                         knn_model,
                         X.values,
-                        None if knn_mode == "proximity" else knn_features_arr,
+                        knn_features_arr,
                         y.values,
                     )
                     if iter_diag is not None:
                         iter_diag["iteration"] = n_iter_done
                         iter_diag["val_rmse"] = float(best_score)
+                        if mixed_impl == "basic":
+                            iter_diag["objective"] = "rmse"
+                        else:
+                            iter_diag["objective"] = str(
+                                mixed_likelihood_target
+                            ).lower()
+                        iter_diag["log_likelihood"] = float(best_ll)
                         iter_diag["random_effect_shrinkage"] = float(
                             best_knn_cfg["shrinkage"]
                         )
+                        iter_diag["sigma_b2"] = float(sigma_b2)
+                        iter_diag["sigma_e2"] = float(sigma_e2)
                         iter_diag["knn_k"] = int(best_knn_cfg["k"])
                         iter_diag["knn_eps"] = float(best_knn_cfg["eps"])
                         iter_diag.pop("base_predictions", None)
@@ -553,11 +701,17 @@ class RandomForestBiasCorrector:
                         break
 
                 self.training_history["model_type"] = f"mixed_knn[{mixed_base}]"
+                self.training_history["mixed_effects_impl"] = mixed_impl
                 self.training_history["merf_n_iter"] = n_iter_done
                 self.training_history["merf_tol"] = tol
                 self.training_history["random_effect_shrinkage"] = float(
                     best_knn_cfg["shrinkage"]
                 )
+                self.training_history["mixed_likelihood_target"] = str(
+                    mixed_likelihood_target
+                ).lower()
+                self.training_history["sigma_b2"] = float(sigma_b2)
+                self.training_history["sigma_e2"] = float(sigma_e2)
                 self.training_history["knn_k"] = int(best_knn_cfg["k"])
                 self.training_history["knn_eps"] = float(best_knn_cfg["eps"])
                 self.training_history["merf_iteration_diagnostics"] = (
@@ -575,8 +729,11 @@ class RandomForestBiasCorrector:
             random_effects = np.zeros(len(y), dtype=float)
             group_effects: dict[str, float] = {}
             best_shrinkage = float(shrinkage_candidates[0])
+            sigma_b2 = 1.0
+            sigma_e2 = 1.0
             n_iter_done = 0
             iteration_diagnostics = []
+            best_ll = float("-inf")
 
             for _ in range(n_iter):
                 n_iter_done += 1
@@ -620,50 +777,106 @@ class RandomForestBiasCorrector:
 
                 fixed_preds = base_model.predict(X.values)
                 residuals = y.values - fixed_preds
-                group_effects_series = pd.Series(residuals).groupby(groups_arr).mean()
-                group_effects = {
-                    str(group): float(effect)
-                    for group, effect in group_effects_series.items()
-                }
+                if mixed_impl == "basic":
+                    group_effects_series = (
+                        pd.Series(residuals).groupby(groups_arr).mean()
+                    )
+                    group_effects_raw = {
+                        str(group): float(effect)
+                        for group, effect in group_effects_series.items()
+                    }
+                    re_blup = np.asarray(
+                        [group_effects_raw.get(g, 0.0) for g in groups_arr],
+                        dtype=float,
+                    )
+                else:
+                    group_effects_raw, re_blup = compute_group_blup_random_effects(
+                        residuals=residuals,
+                        groups=groups_arr,
+                        sigma_b2=max(float(sigma_b2), float(variance_floor)),
+                        sigma_e2=max(float(sigma_e2), float(variance_floor)),
+                    )
 
                 best_score = np.inf
                 for alpha in shrinkage_candidates:
-                    if (
-                        X_val is not None
-                        and y_val is not None
-                        and groups_val_arr is not None
-                    ):
-                        val_re = float(alpha) * np.array(
-                            [group_effects.get(g, 0.0) for g in groups_val_arr],
-                            dtype=float,
-                        )
-                        score = self._rmse(
-                            y_val.values,
-                            base_model.predict(X_val.values) + val_re,
-                        )
+                    re_candidate = float(alpha) * re_blup
+                    if mixed_impl == "basic":
+                        sigma_b2_new = float(sigma_b2)
+                        sigma_e2_new = float(sigma_e2)
+                        ll_score = float("nan")
                     else:
-                        train_re = float(alpha) * np.array(
-                            [group_effects.get(g, 0.0) for g in groups_arr],
-                            dtype=float,
+                        sigma_b2_new, sigma_e2_new, var_hist = (
+                            estimate_variance_components_iterative(
+                                residuals=residuals,
+                                random_effects=re_candidate,
+                                objective=mixed_likelihood_target,
+                                n_fixed_effects=int(X.shape[1]),
+                                sigma_b2_init=max(
+                                    float(sigma_b2), float(variance_floor)
+                                ),
+                                sigma_e2_init=max(
+                                    float(sigma_e2), float(variance_floor)
+                                ),
+                                max_iter=int(variance_max_iter),
+                                tol=float(variance_tol),
+                                var_floor=float(variance_floor),
+                                groups=groups_arr,
+                                is_knn=False,
+                            )
                         )
-                        score = self._rmse(
-                            y.values,
-                            base_model.predict(X.values) + train_re,
+                        ll_score = (
+                            float(var_hist[-1]["log_likelihood"])
+                            if len(var_hist) > 0
+                            else float("-inf")
                         )
+
+                    val_re = float(alpha) * np.array(
+                        [group_effects_raw.get(g, 0.0) for g in groups_val_arr],
+                        dtype=float,
+                    )
+                    rmse_score = self._rmse(
+                        y_val.values,
+                        base_model.predict(X_val.values) + val_re,
+                    )
+
+                    if mixed_impl == "basic":
+                        score = rmse_score
+                    else:
+                        objective_score = -ll_score
+                        if not np.isfinite(objective_score):
+                            objective_score = rmse_score
+                        score = objective_score
                     if score < best_score:
                         best_score = score
                         best_shrinkage = float(alpha)
+                        best_ll = float(ll_score)
+                        sigma_b2 = float(sigma_b2_new)
+                        sigma_e2 = float(sigma_e2_new)
+                        group_effects = {
+                            str(group): float(best_shrinkage * effect)
+                            for group, effect in group_effects_raw.items()
+                        }
 
-                updated_random_effects = best_shrinkage * np.array(
+                updated_random_effects = np.array(
                     [group_effects.get(g, 0.0) for g in groups_arr],
                     dtype=float,
                 )
-                iter_model = MixedEffectsTreeRegressor(
-                    base_model=base_model,
-                    group_effects=group_effects,
-                    group_by=mixed_group_by,
-                    random_effect_shrinkage=best_shrinkage,
-                )
+                if mixed_impl == "basic":
+                    iter_model = MixedEffectsTreeRegressor(
+                        base_model=base_model,
+                        group_effects=group_effects,
+                        group_by=mixed_group_by,
+                        random_effect_shrinkage=1.0,
+                    )
+                else:
+                    iter_model = BLUPMixedEffectsRegressor(
+                        base_model=base_model,
+                        mode="group",
+                        group_effects=group_effects,
+                        group_by=mixed_group_by,
+                        sigma_b2=sigma_b2,
+                        sigma_e2=sigma_e2,
+                    )
                 iter_diag = analyze_merf_contributions(
                     iter_model,
                     X.values,
@@ -673,7 +886,14 @@ class RandomForestBiasCorrector:
                 if iter_diag is not None:
                     iter_diag["iteration"] = n_iter_done
                     iter_diag["val_rmse"] = float(best_score)
+                    if mixed_impl == "basic":
+                        iter_diag["objective"] = "rmse"
+                    else:
+                        iter_diag["objective"] = str(mixed_likelihood_target).lower()
+                    iter_diag["log_likelihood"] = float(best_ll)
                     iter_diag["random_effect_shrinkage"] = float(best_shrinkage)
+                    iter_diag["sigma_b2"] = float(sigma_b2)
+                    iter_diag["sigma_e2"] = float(sigma_e2)
                     iter_diag.pop("base_predictions", None)
                     iter_diag.pop("group_effects_predictions", None)
                     iter_diag.pop("combined_predictions", None)
@@ -688,16 +908,32 @@ class RandomForestBiasCorrector:
                 if max_delta <= tol:
                     break
 
-            mixed_model = MixedEffectsTreeRegressor(
-                base_model=base_model,
-                group_effects=group_effects,
-                group_by=mixed_group_by,
-                random_effect_shrinkage=best_shrinkage,
-            )
+            if mixed_impl == "basic":
+                mixed_model = MixedEffectsTreeRegressor(
+                    base_model=base_model,
+                    group_effects=group_effects,
+                    group_by=mixed_group_by,
+                    random_effect_shrinkage=1.0,
+                )
+            else:
+                mixed_model = BLUPMixedEffectsRegressor(
+                    base_model=base_model,
+                    mode="group",
+                    group_effects=group_effects,
+                    group_by=mixed_group_by,
+                    sigma_b2=sigma_b2,
+                    sigma_e2=sigma_e2,
+                )
             self.training_history["model_type"] = f"mixed_rf[{mixed_base}]"
+            self.training_history["mixed_effects_impl"] = mixed_impl
             self.training_history["merf_n_iter"] = n_iter_done
             self.training_history["merf_tol"] = tol
             self.training_history["random_effect_shrinkage"] = float(best_shrinkage)
+            self.training_history["mixed_likelihood_target"] = str(
+                mixed_likelihood_target
+            ).lower()
+            self.training_history["sigma_b2"] = float(sigma_b2)
+            self.training_history["sigma_e2"] = float(sigma_e2)
             self.training_history["merf_iteration_diagnostics"] = iteration_diagnostics
             self.model = mixed_model
             return mixed_model
@@ -779,6 +1015,7 @@ def analyze_merf_contributions(
     model: _t.Union[
         MixedEffectsTreeRegressor,
         LocalKNNRandomEffectsRegressor,
+        BLUPMixedEffectsRegressor,
         XGBRegressor,
     ],
     X: np.ndarray,
@@ -799,7 +1036,12 @@ def analyze_merf_contributions(
         dict with keys: group_effects_df, base_stats, random_stats, summary_table, plots (optional)
     """
     if not isinstance(
-        model, (MixedEffectsTreeRegressor, LocalKNNRandomEffectsRegressor)
+        model,
+        (
+            MixedEffectsTreeRegressor,
+            LocalKNNRandomEffectsRegressor,
+            BLUPMixedEffectsRegressor,
+        ),
     ):
         print("Model is not a MERF; skipping component analysis.")
         return None
@@ -808,10 +1050,10 @@ def analyze_merf_contributions(
     fixed, re, combined = model.predict_components(X, groups)
 
     # MixedEffectsTreeRegressor has explicit group effects, KNN mixed does not.
-    if isinstance(model, MixedEffectsTreeRegressor):
+    if isinstance(model, (MixedEffectsTreeRegressor, BLUPMixedEffectsRegressor)):
         group_effects_df = model.get_group_effects_df()
-        group_effects = model.group_effects
-        n_groups = len(model.group_effects)
+        group_effects = getattr(model, "group_effects", {})
+        n_groups = len(group_effects)
     else:
         group_effects_df = pd.DataFrame(columns=["group", "effect"])
         group_effects = {}
@@ -862,170 +1104,3 @@ def analyze_merf_contributions(
     results["rmse_improvement"] = base_rmse - combined_rmse
 
     return results
-
-
-def save_merf_diagnostics_plot(
-    diagnostics: dict,
-    output_path: _t.Union[str, Path],
-    decimals: int = 4,
-    figsize: tuple = (14, 10),
-):
-    """
-    Save MERF diagnostics as a formatted table plot (PNG file).
-
-    Args:
-        diagnostics: Output from analyze_merf_contributions()
-        output_path: Path where to save the PNG file
-        decimals: Number of decimal places for formatting
-        figsize: Figure size as (width, height)
-    """
-    if diagnostics is None:
-        return
-
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    fmt = f".{decimals}f"
-    fig, ax = plt.subplots(figsize=figsize)
-    ax.axis("off")
-
-    # Prepare table data
-    table_data = []
-    table_data.append(["MERF Diagnostics", ""])
-    table_data.append(["", ""])
-
-    # Group effects section
-    table_data.append(["Group Effects Statistics", ""])
-    n_groups = diagnostics["random_stats"]["n_groups"]
-    table_data.append([f"  Number of Groups", f"{n_groups}"])
-    table_data.append(
-        [f"  Mean Effect", f"{diagnostics['random_stats']['mean']:{fmt}}"]
-    )
-    table_data.append([f"  Std Dev", f"{diagnostics['random_stats']['std']:{fmt}}"])
-    table_data.append([f"  Min Effect", f"{diagnostics['random_stats']['min']:{fmt}}"])
-    table_data.append([f"  Max Effect", f"{diagnostics['random_stats']['max']:{fmt}}"])
-    table_data.append([f"  Range", f"{diagnostics['random_stats']['range']:{fmt}}"])
-    table_data.append(
-        [f"  % Non-zero Samples", f"{diagnostics['random_stats']['pct_nonzero']:.1f}%"]
-    )
-    table_data.append(["", ""])
-
-    # Base term section
-    table_data.append(["Base (Fixed) Term Statistics", ""])
-    table_data.append([f"  Mean", f"{diagnostics['base_stats']['mean']:{fmt}}"])
-    table_data.append([f"  Std Dev", f"{diagnostics['base_stats']['std']:{fmt}}"])
-    table_data.append([f"  Min", f"{diagnostics['base_stats']['min']:{fmt}}"])
-    table_data.append([f"  Max", f"{diagnostics['base_stats']['max']:{fmt}}"])
-    table_data.append([f"  Range", f"{diagnostics['base_stats']['range']:{fmt}}"])
-    table_data.append(["", ""])
-
-    # Contribution analysis
-    table_data.append(["Contribution Analysis", ""])
-    table_data.append(
-        [
-            f"  Avg Group Effect %",
-            f"{diagnostics['contribution_ratio_groups']*100:.1f}%",
-        ]
-    )
-    table_data.append(
-        [f"  Max Group Effect %", f"{diagnostics['max_contribution_ratio']*100:.1f}%"]
-    )
-    table_data.append(["", ""])
-
-    # Error metrics (if available)
-    if "base_rmse" in diagnostics:
-        table_data.append(["Error Metrics (Validation Set)", ""])
-        table_data.append([f"  Base Model RMSE", f"{diagnostics['base_rmse']:{fmt}}"])
-        table_data.append(
-            [f"  MERF Model RMSE", f"{diagnostics['combined_rmse']:{fmt}}"]
-        )
-        table_data.append(
-            [f"  RMSE Improvement", f"{diagnostics['rmse_improvement']:{fmt}}"]
-        )
-        if abs(diagnostics["rmse_improvement"]) > 1e-6:
-            pct = (diagnostics["rmse_improvement"] / diagnostics["base_rmse"]) * 100
-            table_data.append([f"  % Improvement", f"{pct:.1f}%"])
-        table_data.append(["", ""])
-
-    # Create table
-    table = ax.table(
-        cellText=table_data,
-        cellLoc="left",
-        loc="upper left",
-        colWidths=[0.6, 0.4],
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2)
-
-    # Style header rows
-    for i in [0, 2, 9, 12, 15]:
-        if i < len(table_data):
-            table[(i, 0)].set_facecolor("#4472C4")
-            table[(i, 0)].set_text_props(weight="bold", color="white")
-            table[(i, 1)].set_facecolor("#4472C4")
-            table[(i, 1)].set_text_props(weight="bold", color="white")
-
-    # Alternate row shading
-    for i, row in enumerate(table_data):
-        if i not in [0, 2, 9, 12, 15, 1] and row != ["", ""]:
-            if i % 2 == 0:
-                table[(i, 0)].set_facecolor("#E8F0F8")
-                table[(i, 1)].set_facecolor("#E8F0F8")
-
-    plt.tight_layout()
-    plt.savefig(str(output_path), dpi=150, bbox_inches="tight")
-    plt.close(fig)
-
-    # Also save top group effects as separate table if available
-    if "group_effects_df" in diagnostics:
-        top_groups_path = output_path.parent / f"{output_path.stem}_top_groups.png"
-        _save_group_effects_table(
-            diagnostics["group_effects_df"], top_groups_path, decimals
-        )
-
-
-def _save_group_effects_table(
-    group_effects_df: pd.DataFrame,
-    output_path: _t.Union[str, Path],
-    decimals: int = 4,
-    n_top: int = 15,
-):
-    """Save top group effects as a separate formatted table."""
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    df_top = group_effects_df.head(n_top).copy()
-    df_top.columns = ["Group", "Effect"]
-    df_top["Effect"] = df_top["Effect"].apply(lambda x: f"{x:.{decimals}f}")
-
-    fig, ax = plt.subplots(figsize=(10, max(6, n_top * 0.4)))
-    ax.axis("off")
-
-    table_data = [["Group ID", "Effect"]] + df_top.values.tolist()
-
-    table = ax.table(
-        cellText=table_data,
-        cellLoc="center",
-        loc="center",
-        colWidths=[0.7, 0.3],
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(9)
-    table.scale(1, 2)
-
-    # Header styling
-    for i in range(2):
-        table[(0, i)].set_facecolor("#4472C4")
-        table[(0, i)].set_text_props(weight="bold", color="white")
-
-    # Alternate row shading
-    for i in range(1, len(table_data)):
-        if i % 2 == 0:
-            table[(i, 0)].set_facecolor("#E8F0F8")
-            table[(i, 1)].set_facecolor("#E8F0F8")
-
-    plt.title(f"Top {n_top} Group Effects", fontsize=12, fontweight="bold", pad=20)
-    plt.tight_layout()
-    plt.savefig(str(output_path), dpi=150, bbox_inches="tight")
-    plt.close(fig)
