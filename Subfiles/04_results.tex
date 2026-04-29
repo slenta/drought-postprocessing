@@ -1,0 +1,75 @@
+% !TeX root = ../ba-lentz.tex
+
+\documentclass[ba-lentz.tex]{subfile}
+
+\begin{document}
+
+{\let\clearpage\relax \chapter{Results }}\label{results}
+
+\section{Setup}\label{setup}
+
+Section \ref{methods} describes the many advantages that mixed effect boosted forests can bring as a method to the postprocessing of clustered climate data.
+Now this chapter brings the methodological concepts from section \ref{methods} together with the available data (section \ref{data}) in order to outline the step-by-step approach to the performed analysis. \\
+At first, all data is preprocessed according to the steps described in section \ref{preprocessing} in order to gain a $CWB$ dataset for both reference and hindcast data.
+Then, the preprocessed hindcast data is quantile mapped to fit the reference data's distribution.
+Afterwards, a mixed effect ensemble tree method uses the quantile mapped hindcasts as training predictors in order to predict its residuals to the reference data $CWB$ as a target variable.
+This mixed effect model utilizes an XGBoost base with a BLUP estimation of the grouped random effects.
+In addition to the quantile map hindcasts, the XGBoost base model is given several other predictors, including reference climatology, reference data in the three months before the hindcast start, regional information (latitudes and longitudes of each grid cell) and reference variability of the climatological period.
+The impact of each predictor will be analysed and the choice of predictors will be accordingly adjusted in order to gain the best possible prediction.
+Then, the choice of clustering will be analysed with the most important clustering choices being the grouping by quantiles of the most important predictors, by grid cell or by region both physically and in the predictor feature space.
+The analysis will also include a short comparison to simpler ML models, like basic Random Forest predictors and XGBoost models without a mixed effect implementation.
+For each year only one hindcast is extracted in order for the network to be able to learn leadmonth and calendar month specific dynamics in the quantile mapped residuals.
+Each hindcast covers the 6 month time period from June to November, which corresponds to the dry season of especially southern and south-eastern Africa.
+Of the 42 available years from 1983 to 2025, 4 years will be laid aside from the training procedure for both validation and testing.
+Finally, all postprocessing models will be evaluated according to their effect both on deterministic metrics such as RMSE or MAE and in regard to their probabilistic prediction of extreme events.
+Afterwards, the results of this analysis will be discussed in section \ref{discussion}.
+
+
+\section{Quantile Mapping}
+
+The QM algorithm, described in section \ref{qm}, refittet the original GCFS Hindcast $CWB$ distributions (section \ref{gcfs}) to fit the reference observational $CWB$, calculated from the Tamsat precipitation (section \ref{tamsat}) and the ERA5 temperature dataset (section \ref{era5}).
+The main variable in statistical QM that can be varied is the amount of quantiles.
+This value has to be fixed at the beginning of the QM step in order to sort the hindcast and reference distribution values into the corresponding quantile groups.
+In this consideration, a larger amount of quantiles generally leads to a closer fitting of the distributions, while it also comes hand in hand with higher computational costs.
+There is a limit to the accuracy of quantile mapping, which is approached exponentially.
+So in order to get an amount of quantiles that stays computationally efficient while retaining close to maximal accuracy a number of different values for the amount of quantiles $n_q$ has to be tested. \\
+To evaluate the quality of the utilized QM step, both deterministic and probabilistic metrics are chosen in order to analyse the effect of the QM step on the overall as well as the extreme event prediction.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/timeline_qm_nq_compare_lm1.png}
+    \caption[Timeseries comparison of quantile mapping implementations]{\textbf{Timeseries comparison of quantile mapping implementations.} Quantile mapped hindcast ensemble means $CWB$ with min/max spread compared to the original GCFS hindcast and reference $CWB$ for the first leadmonth. The differeeThe original hindcast timeseries is displayed as dotted line, while the reference $CWB$ is shown in black. }\label{figure_qm_ts}
+\end{figure}
+
+Figure \ref{figure_qm_ts} illustrates two very important results.
+On the one hand, it is visible that the QM procedure significantly reduces the mean bias in the original hindcast's estimate.
+Although it does not correct for temporal trends in interannual variability, it completely erases the mean bias over the entire 40 year period.
+On the other hand, figure \ref{figure_qm_ts} illustrates that the amount of quantiles has only very little impact on the quality of the QM estimate.
+Just by visual inspection the timeseries become indistinguishable at $n_{quantiles} > 15$.
+The same results can be established from a comparison of the $CWB$ distributions.
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/distribution_qm_nq_compare_all_leadmonths.png}
+    \caption[$CWB$ distribution comparison of quantile mapping implementations]{\textbf{$CWB$ distribution comparison of quantile mapping implementations.} Quantile mapped hindcast ensemble mean $CWB$ distribution compared to the original GCFS hindcast (grey) and reference $CWB$ (black) for the first leadmonth.}\label{figure_qm_dist}
+\end{figure}
+
+Again, a minimal reduction is still visible up to a value of $n_{quantiles} = 15$.
+The illustration also shows that the quantile mapping does not only shift the mean distributional bias but also corrects for some distributional mismatches.
+However, it also shows the limits of the QM procedure, which cannot perfectly match the distributions towards the reference data even at very high amounts of quantiles.
+Further inspection still shows a minimal reduction in root mean squared error (RMSE) for all leadmonths up to a value of $n_{quantiles} = 20$.
+Therefore, $n_{quantiles} = 20$ is chosen in order to provide the best possible input to the ML postprocessing step, while reducing the computational costs as much as possible.
+
+
+
+
+
+\section{Deterministic Prediction Improvement}
+
+
+
+\section{Probabilistic Prediction Improvement}
+
+
+\end{document}

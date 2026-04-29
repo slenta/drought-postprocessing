@@ -8,84 +8,228 @@
 
 \section{Data}\label{data}
 
-In the approach utilized in this work two datasets are important.
+This work uses the climatic waterbalance (CWB) defined as:
+
+\begin{align} \label{cwb}
+    CWB = P - PET ,
+\end{align}
+
+with P as the total monthly precipitation and PET the potential evapotranspiration.
+Due to the limitation in output variables from the DWD seasonal prediction system, a relatively simple version of the PET is used, only taking monthly mean temperature as an input value.
+For the training and evaluation of the network, three datasets are used and therefore have to be discussed.
 On the one hand, the hindcasts used for the ML training and therefore the input into the postprocessing workflow are the seasonal climate hindcasts by the German Weather Service (DWD).
-On the other hand, the reference datasets have to be discussed.
-As a ground truth for the ML training, a mixture of 2 reanalysis datasets based on remote sensing observations have been chosen.
-The TAMSAT precipitation reanalysis and the ERA5 reanalysis as a surface temperature estimate.
+On the other hand, a mixture of 2 reanalysis datasets based on remote sensing observations have been chosen as reference data and therefore assumed ground truth.
+This reference CWB is build from the TAMSAT precipitation reanalysis and the ERA5 reanalysis of near-surface air temperature.
 In the following section, these datasets, their strengths and limitations as well as current use cases in research will be discussed. \\
 
-\subsection{The GCFS Seasonal Forecast System}
+\subsection{The GCFS Seasonal Forecast System}\label{gcfs}
 
 Since 2016, the DWD is operationally running the current GCFS forecast system.
 It provides seasonal forecasts up to six months ahead using a fully coupled Earth system model, including atmosphere, ocean, land, and sea ice component \parencite{frohlich_german_2021}.
-GCFS2.0 is based on **MPI-ESM-HR**, increasing atmospheric resolution to **T127 (~70 km, 95 levels)** and ocean resolution to **0.4°**, representing a major upgrade from GCFS1.0. (p.5, lines 123–126)
+GCFS2.0 is based on the Max-Planck Insitutes high resolution earth system model (MPI-ESM-HR), with an atmospheric resolution of approximately 70 km at 50°N and an ocean resolution of approximately 0.4°, representing a major upgrade from GCFS1.0 \parencite{frohlich_german_2021}.
+Initial conditions are generated using continuous nudging assimilation toward ERA-Interim atmospheric reanalysis combined with ORAS5 ocean reanalysis, as constructed in \parencite{baehr_prediction_2015}.
+Ensemble forecasts are produced using perturbations in atmospheric parameters and ocean bred vectors, with 30 hindcast members.
+Of these 30 members, 25 are currently available for download from the copernicus data store and used for the training of the ML algorithm.
+Compared to the previous version, GCFS2.0 shows significantly improved winter forecast skill, particularly for Northern Hemisphere circulation patterns, where NAO prediction skill approximately doubled compared to GCFS1.0 \parencite{frohlich_german_2021}.
+However, weaknesses remain, including reduced skill in the tropical Pacific and Atlantic, which negatively affects ENSO prediction.
+In regard to the study region of this work, a cold bias over northern Africa and a warm bias over southern Africa is still apparent, even if reduced compared to GCFS1.0 \parencite{frohlich_german_2021}.
+GCFS2.0 also exhibits a persistent tropical warm bias, likely related to atmospheric parameterization changes.
+Overall, GCFS2.0 improves winter predictability and regional forecast skill, but limitations remain in tropical processes and seasonal-dependent performance \parencite{frohlich_german_2021}.
 
-Initial conditions are generated using **continuous nudging assimilation** toward ERA-Interim atmospheric reanalysis combined with **ORAS5 ocean reanalysis** and decadal assimilation from the MiKlip project. (p.7–8, lines 162–186)
+\subsection*{The TAMSAT precipitation dataset}\label{tamsat}
 
-Ensemble forecasts are produced using perturbations in atmospheric parameters and ocean bred vectors, with **30 hindcast members and 50 forecast members**. (p.8–9, lines 187–220)
+The TAMSAT African Rainfall Climatology and Time Series (TARCAT) is a 30-year precipitation dataset (1983–2012) developed to provide temporally consistent rainfall estimates across Africa \parencite{maidment_tamsat_2020}\footnote{All information on the TAMSAT precipitation dataset in this subsection are taken from \parencite{maidment_tamsat_2020}, unless explicitely marked differently.}.
+TARCAT is based on Meteosat thermal infrared (TIR) satellite imagery calibrated against rain-gauge observations to estimate rainfall across data-sparse regions.
+The dataset is produced at 0.0375° (ca. 4 km) spatial resolution and 10-day (dekadal) temporal resolution, enabling regional-scale climate and drought analysis.
+Rainfall estimates are derived using cold cloud duration (CCD) from TIR imagery, based on the assumption that cold cloud tops are associated with deep convective rainfall.
+The TAMSAT algorithm applies fixed monthly calibration parameters derived from gauge data, ensuring temporal consistency without requiring contemporaneous observations.
+This calibration approach reduces biases caused by declining gauge networks and enables reliable long-term rainfall variability analysis.
+TARCAT successfully reproduces spatial rainfall patterns and interannual variability, with correlations up to 0.85 with CRU rainfall data.
+However, the dataset shows a dry bias of approximately $20 \%$ due to its optimization for drought monitoring.
+Overall, TAMSAT provides high-resolution rainfall estimates particularly valuable in gauge-sparse regions of Africa, though limitations remain due to satellite calibration uncertainties and convective-based rainfall assumptions.
+The TAMSAT TARCAT dataset addresses sparse gauge observations by using fixed climatological calibration parameters derived from historical rain-gauge data rather than merging contemporaneous observations.
+This approach avoids biases introduced by changing gauge coverage over time.
+Rainfall estimates are then generated solely from satellite-derived cold cloud duration (CCD) fields, allowing spatially complete precipitation estimates even where no ground observations exist.
+For missing satellite observations, gaps of up to 6 hours are statistically interpolated, while longer gaps a supported by climatological 10 day averages.
+Due to its calibration for regional droughts in Africa, the TAMSAT reanalysis presents an ideal baseline for this works postprocessing of seasonal drought predictions.
 
-One major **strength of GCFS2.0** is improved winter forecast skill, particularly for Northern Hemisphere circulation patterns, where **NAO prediction skill approximately doubled** compared to GCFS1.0. (p.21, lines 474–477)
+\subsection{The ERA5 reanalysis temperature dataset}\label{era5}
 
-Temperature and geopotential height forecast skill also improved over regions including Alaska, Siberia, northern Europe, and Greenland. (p.15, lines 321–328)
+ERA5 is the fifth-generation global atmospheric reanalysis produced by the European Centre for Medium-Range Weather Forecasts (ECMWF) and extended to cover the period 1940–2022 \parencite{soci_era5_2024}\footnote{All information on the ERA5 temperature dataset in this subsection are taken from \parencite{soci_era5_2024}, unless explicitely marked differently.}.
+The dataset provides hourly global atmospheric, land surface, and ocean wave fields at approximately 31 km horizontal resolution.
+ERA5 fills observational gaps using data assimilation within a global numerical weather prediction model, combining observations with physically consistent model forecasts.
+Before the satellite era, particularly in the Southern Hemisphere, ERA5 fields were therefore largely statistically constrained by the model, reflecting greater uncertainty due to limited observations.
+ERA5 assimilates sub-daily in-situ and satellite observations, increasing from about 17,000 observations per day in 1940 to 25 million per day by 2022.
+As a result, the quality of ERA5 improves over time, especially since the introduction of satellite observations in the 1970s.
+Surface air temperature at 2-m height is one of the key variables of the ERA5 reanalysis.
+ERA5 shows cold biases over land during early decades (1940–1957) due to limited observational constraints.
+After the late 1950s, ERA5 temperature trends agree well with independent observational datasets such as Berkeley Earth and GISTEMP.
+Despite the early-period limitations, ERA5 provides one of the longest and most consistent global temperature reanalyses.
 
-However, **weaknesses remain**, including reduced skill in the tropical Pacific and Atlantic, which negatively affects ENSO prediction. (p.15, lines 337–340; p.21, lines 474–475)
+\subsection{Data Preprocessing}\label{preprocessing}
 
-GCFS2.0 also exhibits a **persistent tropical warm bias**, likely related to atmospheric parameterization changes. (p.21, lines 447–468)
+Before hindcast and observational datasets can be fed as input to the ML algorithm, they have to be preprocessed.
+First, in order to ensure parallel resolutions, both observational datasets are remapped to share the common resolution of the GCFS hindcasts.
+Since the GCFS precipitation estimate is measured in total precipitation rate, it also first has to be converted to mean precipitation per month to match the TAMSAT dataset via
 
-Overall, GCFS2.0 improves winter predictability and regional forecast skill, but limitations remain in tropical processes and seasonal-dependent performance. (p.21, lines 470–477)
+\begin{align}
+    P = tprate \cdot spm ,
+\end{align}
 
+where $spm$ is the amount of seconds per month. \\
 
+Afterwards, the potential evapotranspiration (PET) has to be calculated from the two temperature estimates.
+Due to the lack of other variables, the Hamon method for the calculation of the PET is utilized, only taking the daily mean temperature and latitude at that gridcell as inputs.
+For lack of daily forecast data, the PET is assumed to be stationary over the whole month at the monthly mean temperature.
+The Hamon method calculates PET as
 
+\begin{align}
+    PET = c \cdot \frac{N}{12} \cdot P_{t} .
+\end{align}
 
-Since 2020, the DWD uses the German Climate Forecast System (GCFS) for its seasonal predictions.
+In this equation, c is a constant coefficient, N denotes the number of daylight hours and $P_{t}$ is the saturated water vapor density at the daily mean temperature. \\
+Then, the climatic water balance (CWB) is calculated as the difference between daily precipitation and PET (see equation \ref{cwb}).
+Finally, a monthly mean of the CWB is taken to return to seasonal timescales. \\
 
 
 
 \section{Methods}\label{methods}
 
-XGBoost is a type of gradient boosting algorithm that
-builds an ensemble of decision trees sequentially, where each new tree focuses on correcting the
-errors made by the previous ones. Unlike random forests, which aggregate the predictions of
-many independent trees, gradient boosting improves prediction accuracy by iteratively minimizing
-error. \parencite{karsisto_post-processing_2025}
+This work will use two distinct steps for the postprocessing of seasonal climate predictions.
+First, statistical quantile mapping will reduce the distributional error and biases of the original hindcast as far as possible.
+Subsequently, an ML algorithm will postprocess the residuals left over from the quantile mapping step.
+In the following, both the quantile mapping and the ML approach will be described in detail.
 
-In einem hybriden Ansatz sollen in dieser Arbeit die Vorhersagedaten eines dynamischen Klimamodells des DWD mithilfe von KI nachbearbeitet werden.
-Dafür muss zunächst analysiert werden, in welchen Regionen das dynamische Modell Dürreereignisse mit viel oder wenig Skill vorhersagt.
-Zur Bewertung des Vorhersageskills sollen einfach statistische Metriken, wie der Root Mean Squared Error (RMSE) oder Pearsons R Korrelation verwendet werden.
-Anschließend soll ein Partial Convolutional Neural Network (PCNN) die dynamischen Vorhersagen in den Regionen nachbearbeitet werden, in welchen diese als wenig skillvoll gelabelt wurden.
-Dieses PCNN soll die realistischen Muster von regionalen Dürreextremen auf dem afrikanischen Kontinent mithilfe von hochaufgelösten Remote Sensing Daten lernen.
-PCNNs stammen ursprünglich aus dem Einfüllen von Fotografien \parencite{liu_image_2018}.
-Aufgrund ihrer Fähigkeit räumliche Strukturen zu lernen und auf das Ausfüllen von Lücken anzuwenden, wurden sie allerdings schon häufiger für die Rekonstruktion von Klimadaten verwendet \parencite{kadow_artificial_2020, lentz_improving_2025}.
-Dabei werden mithilfe einer binären Maske und einem Input-Bild schrittweise fehlende Werte (Pixel, an denen die Maske 0 anzeigt) mit Werten, die den Traininsdaten an dieser Stelle entsprechen, eingefüllt.
-Im Kontext dieser Arbeit soll das PCNN die Dürrevorhersagen in den Regionen, in denen sie als schlecht bewertet wurden, mit den aus den Remote Sensing Daten gelernten Strukturen ausfüllen. \\
-Als Predictor für Dürreereignisse soll dabei die klimatische Wasserbilanz
+\subsection{Statistical Quantile Mapping}\label{qm}
+
+Quantile mapping (QM) is a statistical bias-correction method that can adjust a statistical distribution to match another.
+QM corrects systematic biases by redistributing the values of an input variable to the empirical cumulative distribution functions (CDFs) of target data.
+Because the full distribution is adjusted, quantile mapping can correct biases in mean, variance, and extremes \parencite{schwertfeger_python_2023}.
+
+For this work, the Python Cmethods implementation is used \parencite{schwertfeger_python_2023}, where quantile mapping is defined by mapping values from a modeled control distribution to the observational reference distribution.
+The package was especially constructed for the use on climate data.
+The corrected value is calculated via a series of correction steps.
+First, the quantile value of time step $i$ saved as $\epsilon (i)$.
 
 \begin{align}
-    KWB = P - PET
+    \epsilon (i) = F_{sim, p} [X_{sim,p}(i)], \epsilon (i) \in \{0, 1\} ,
 \end{align}
 
-genommen werden. $P$ bezeichnet dabei den totalen Niederschlag pro Quadratmeter, während $PET$ die potentielle Evapotranspiration bezeichnet.
-Die $PET$ muss dabei zunächst berechnet werden.
-Mit Penman-Monteith nutzt die state-of-the-art Methode zur Berechnung der $PET$ allerdings viele Input-Größen, welche entweder nicht vorhergesagt werden oder keine Predictability auf saisonalen Zeitskalen besitzen.
-Aus diesem Grund soll eine einfachere, nur auf der Temperatur basierte Berechnungsmethode der $PET$ in dieser Arbeit verwendet werden.
-Die KWB bildet damit die Grundlage des SPEI Dürreindizes (Standardised Precipitation Evaporation Index).
-Da die Nachberarbeitung einer standartisierter Größe allerdings keinen Sinn ergibt, da sie die Standartisierung hinfällig machen würde, wird die unstandartisierte KWB als Zielgröße genutzt werden.
-Anschließen kann nach dem Postprocessing Schritt durch das PCNN eine Standartisierung vorgenommen werden, um eine globale Vergleichsgröße zu berechnen. \\
-Ausgewertet sollen die Effekte der Nachberarbeitung dann wieder mithilfe von RMSE und Korrelationkoeffizienten, aber auch durch den Vergleich der KWB Distributionen, um ein spezielles Augenmerk auf die wirkungsvollen Ereignisse in den Extremteilen der Distribution zu legen. \\
-Zusätzlich zu der reinen Nachbearbeitung der dynamischen Vorhersagen soll auch versucht werden noch einen Downscaling Mechanismus in das PCNN einzubauen.
-Durch seine U-net förmige Struktur könnte durch einen weiteren Schritt im Decoder des PCNNs die Auflösung der Inputdaten theoretisch erhöht werden.
-Durch die Implementierung eines solchen Downscalingmechanismusses könnten die niedrig aufgelösten dynamischen Vorhersagen auf die höhere Auflösung der Remote Sensing Daten im Training angehoben werden.
+where $F_{sim, p}$ represents the cumulative distribution function of the input (model) data of the variable value $X_{sim, p}$ for a certain quantile $p$.
+In the next step, the quantile value is inserted into the inverse cumulative distribution function of the reference (observational) data $F^{-1}_{obs, h}$.
+This yields the corrected quantile mapped value $X^{QDM (1)}_{sim, p}$:
 
-\section{Daten}
+\begin{align}
+    X^{QDM(1)}_{sim, p} (i) = F^{-1}_{obs, h} [\epsilon (i)] .
+\end{align}
 
-Als Datengrundlage für das dynamische Modell sollen die operationellen saisonalen Klimavorhersagen des DWD genutzt werden \parencite{paxian_dwd_2023}.
-Diese sind frei verfügbar und können im Copernicus Data Store frei heruntergeladen werden \parencite{paxian_dwd_2023}.
-Als Grundlage für das Training soll die KWB, berechnet aus höher aufgelösten Remote Sensing Daten verwendet werden.
-Hierzu soll der totale Niederschlag des TAMSAT-Datensatzes der University of Reading genutzt werden \parencite{maidment_tamsat_2020}.
-Dieser ist auf dem afrikanischen Kontinentalgebiet kalibriert und bietet somit die ideale Grundlage für diese Arbeit.
-Diese sollen für die Berechnung der $PET$ mit den Temperaturdaten der 0.25x0.25 ERA5-Reanalyse kombiniert werden, um die $KWB$ zu berechnen \parencite{soci_era5_2024}.
+Therefore, QM overall determines the quantile value of the reference data for the corresponding quantile of the input data \parencite{schwertfeger_python_2023}. \\
 
+Despite its flexibility, QM has several general limitations.
+First, QM assumes that model biases estimated during the calibration period remain stationary in the prediction period, which may not hold under changing climate conditions \parencite{cannon_bias_2015}.
+However, with the prediction on seasonal timescales, forecast data can be assumed to be within the training period's general distribution.
+Nonetheless, detrending training and evaluation data can be introduced to counter this out-of-distribution problem under changing climate conditions.
+Furthermore, quantile mapping modifies the marginal distribution only and does not correct temporal sequencing, persistence, or physical process representation in climate models.
+In order to account for these weaknesses, the correction of temporal sequencing and physical representations is then tackled by the ML step afterwards. \\
+Quantile mapping is widely used for climate hindcast post-processing because climate models often exhibit systematic biases in both temperature and precipitation.
+QM methods have been shown to substantially improve agreement between modeled and observed hydro-climatic variables and reduce systematic errors in climate simulations \parencite{enayati_bias_2021}.
+A key strength of QM for hindcast correction is that it adjusts the entire distribution rather than only mean values, improving representation of extreme events as well as mean and variability representations.
+However, quantile mapping may also alter modeled climate signals.
+For example, \cite{cannon_bias_2015} show that quantile mapping can modify projected trends in extremes even when mean trends are preserved, highlighting trade-offs between bias correction and trend preservation. \\
+
+Overall, quantile mapping provides a robust method for post-processing climate hindcasts.
+Nonetheless, fundamental limiations especially in the correction of temporal sequencing remain that have to be adressed in addition to the quantile mapping.
+This is where this work employs a second postprocessing step, utilizing ML to adress the remaining uncertainties in the prediction.
+
+
+\subsection{Residual correction with mixed effect random forests}
+
+In a second postprocessing step, I try to predict the remaining differences between the QM results and the observational reference data.
+In order reach a stable, cost-efficient and at the same time sophisticated ML setup, this work relies on a mixed effect random forest (MERF) architecture.
+This is based on a relatively simple gradient boosted Random Forest model and supplemented by a grouped random effect.
+Therefore, it is important to first explain RFs and the expanded gradient boosted version (XGBoost) before then explaining MERFs and the implications for this work.
+
+\subsubsection{Random Forest Machine Learning Models}
+
+In general, Machine Learning can be defined as algorithms that can learn from data without being specifically programmed \parencite{louppe_understanding_2014}.
+An algorithm learns from data when it improves at a certain task, mostly regression or classification tasks, with its input data.
+One of the first subsets of Machine Learning tree structured models.
+Basically, tree structured models divide the input spaces of a classification or regression task into subspaces (trees) and subsequently assign prediction values to all objects within a subspace.
+This division is often conducted in different steps resulting in internal trees (subspaces that are divided again) and terminal trees (the final subspaces, also called leafs) \parencite{louppe_understanding_2014}. \\
+
+In supervised ML, the construction of decision trees is then driven by finding a division, which minimizes a loss for a set of training data.
+Regression or prediction problems are in this case defined as learning a target value (output) for each predictor (input).
+The loss for one tree $\phi$ can be defined as the combined loss for each individual terminal tree $t$ with an element $y_t$:
+
+\begin{align}
+    Err_{train} (\phi) = \sum_{t \in \tilde{\phi}} \cdot p(t) \cdot (1 - p(\tilde{y_t} | t)) ,
+\end{align}
+
+where $Err_{train}$ is the decision trees total error on the training dataset and $\tilde{\phi}$ denotes the total set of terminal trees of the overall tree $\phi$ \parencite{louppe_understanding_2014}.
+Mathematically, it can be quite easily proven that each new terminal tree reduces the training error until the tree is finally saturated and has an individual leaf for each predictor sample.
+However, such an overcomplex model might reduce the training error for a model, but in most cases then looses its ability to generalize its results for out-of-distribution validation data, which nearly all prediction tasks include.
+Thus, metrics usually have to be chosen to stop the development of additional leafs during training, which minimize the error not only on the training dataset, but more importantly on a separate validation dataset.
+Additionally, further stopping criteria, like restricting the amount of leafs per tree as well as the overall tree's maximum depth, can reduce the risk of overfitting to training data. \\
+
+The basic idea behind Random Forests (RF) as decision-based ML methods is to introduce an ensemble of randomly perturbed decision trees, which are at the end combined again in order to reach a more stable prediction.
+Usually, this combination is conducted by taking the average prediction of all individual trees as the average prediction is assumed to minimize the error compared to the individual, more variante predictions.
+This assumption can be made, as an ensemble is less likely to get stuck in local loss minima and is able to better capture generalization possibilities to unrelated validation data.
+Since the 1990s random forests have been developed and mostly changed in the manner, in which the random perturbations are introduced to the ensemble \parencite{louppe_understanding_2014}.
+Since then, RFs gained widespread use especially  due to their quality at predicting out-of-bag validation data.
+Additionally, they possess the straightforward ability to assess the importance of individual predictors for the prediction quality.
+This feature of decision trees adds a lot of interpretability and reliability to RFs compared to black-box models, such as neural networks.
+Similarly, due to their ensemble nature, RFs allow the estimation of the proximity of predictor values in the RF's feature space by determining the co-occurence in a common leaf over an ensemble of decision trees.
+In this way, RF results can again be explained better, while outliers in the training dataset become easily identifiable.
+Finally, compared to other more complex ML methods, RFs show high consistency at low computational costs and a relatively simple algorithmic setup.
+Therefore, they reguire less hyperparameter tuning as well as little domain specific ML knowledge for implementation \parencite{louppe_understanding_2014}. \\
+
+Due to all these advantages, RFs have found many applications in the climate sciences of recent years \parencite{das_evaluation_2022,valecha_prediction_2018}.
+They even have already been combined with quantile mapping in order to improve bias correction of climate projections \parencite{raeesi_using_2024}.
+In their study, \cite{raeesi_using_2024} have found that RFs can significantly reduce projection errors even after the quantile mapping step.
+However, these methods have neither been utilized for seasonal predictions yet, nor for the consideration of extreme events.
+Additionally, RFs can run into difficulties when tasked to predict complex patterns.
+Therefore, it is worth looking at further developments of decision tree based ML methods in order to gain maximum performance from limited training data.
+
+\subsubsection{Gradient Boosting with XGBoost}
+
+XGBoost is a type of gradient boosting algorithm that builds an ensemble of decision trees sequentially, where each new tree focuses on correcting the errors made by the previous ones.
+Unlike random forests, which aggregate the predictions of many independent trees, gradient boosting improves prediction accuracy by iteratively minimizing error. \parencite{karsisto_post-processing_2025}
+On a general level, XGBoost remains a decision tree based algorithm, where the final prediction can be expressed with
+
+\begin{align}
+    \tilde{y}_i = \sum_{k=1}^{K} f_k(x_i) ,
+\end{align}
+
+where $y_i$ is the prediction value of the model for the feature vector $x_i$ at sample i and $f_k$ is the leaf score for the kth tree.
+Compared to an RF ensemble, each tree is  iteratively trained on the residual of the last prediction.
+Therefore, it is able to learn from the results of the previous trees until a maximum number of K trees is obtained. \\
+These changes in algorithm lead to generally accepted improved results.
+For example, XGboost algorithms have shown to be more accurate, faster and less prone to tree overfitting compared to regular random forest architectures \parencite{chen_xgboost_2016}.
+However, they have also shown to sometimes miss nonlinear effects that more complex ML methods, like depp neural networks are able to extract.
+Therefore, a challenge remains in finding a method that retains the stability and computational efficiency of decision tree based methods, the improved learning of gradient boosting over random forests and can capture more complex nonlinear effects.
+
+
+\subsubsection{Adding Group Specific Effects with Mixed Effect Random Forests}
+
+One idea to improve on ensemble tree methods is the idea of mixed-effects regression trees.
+In the basic idea of this algorithm developed by \cite{hajjem_mixed_2011}, fixed and random group effects are dissociated and corrected separately.
+This can be expressed as
+
+\begin{align}
+    y_i = X_i \beta + Z_i b_i plus \eta_i ,
+\end{align}
+
+where $y_i$ is the model prediction, $X_i$ is the matrix of fixed-effect covariates, $Z_i$ is the matrix of random-effects covariates and $\eta_i$ denotes the remaining error.
+For a decision tree, or an ensemble of trees \parencite{hajjem_mixed-effects_2014}to predict fixed relationships in the data, the random-effect of group clustering is estimated at each iteration and removed from the data.
+The remaining cluster-specific component can then be estimated individually, for example with a best linear unbiased predictor (BLUP).
+So basically, the algorithm first removes the random effect from the predictor at each iteration.
+Afterwards, the prediction model, often an ensemble based decision tree model, such as RFs or XGBoost, estimates the fixed effects.
+Then the clustered random effect is newly estimated from the remaining residuals and again subtracted from the original predictor for the next basemodel iteration \parencite{hajjem_mixed_2011}. \\
+
+Simulations show that mixed effect random forest (MERF) methods show significant improvements compared to standard ensemble decision tree algorithms when group effects are non-negligible \parencite{hajjem_mixed-effects_2014}.
+The improvements come especially in the estimation of non-linear relationships in the prediction data.
+Therefore, MERFs should represent a viable option for the postprocessing of climate predictions, where data can be grouped by region or physical properties, for example its value in a certain climatic variable.
+In this work this mixed effect approach will be combined with an XGBoost base model in order to profit from the fast and accurate learning of XGBoost models while at the same time using the mixed effect method for improving on the remaining nonlinear residuals.
 
 
 

@@ -17,6 +17,335 @@
 \endgroup
 
 \datalist[entry]{nyt/global//global/global}
+  \entry{baehr_prediction_2015}{article}{}
+    \name{author}{10}{}{%
+      {{hash=BJ}{%
+         family={Baehr},
+         familyi={B\bibinitperiod},
+         given={Johanna},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=FK}{%
+         family={Fröhlich},
+         familyi={F\bibinitperiod},
+         given={Kristina},
+         giveni={K\bibinitperiod},
+      }}%
+      {{hash=BM}{%
+         family={Botzet},
+         familyi={B\bibinitperiod},
+         given={Michael},
+         giveni={M\bibinitperiod},
+      }}%
+      {{hash=DDI}{%
+         family={Domeisen},
+         familyi={D\bibinitperiod},
+         given={Daniela\bibnamedelima IV},
+         giveni={D\bibinitperiod\bibinitdelim I\bibinitperiod},
+      }}%
+      {{hash=KL}{%
+         family={Kornblueh},
+         familyi={K\bibinitperiod},
+         given={Luis},
+         giveni={L\bibinitperiod},
+      }}%
+      {{hash=ND}{%
+         family={Notz},
+         familyi={N\bibinitperiod},
+         given={Dirk},
+         giveni={D\bibinitperiod},
+      }}%
+      {{hash=PR}{%
+         family={Piontek},
+         familyi={P\bibinitperiod},
+         given={Robert},
+         giveni={R\bibinitperiod},
+      }}%
+      {{hash=PH}{%
+         family={Pohlmann},
+         familyi={P\bibinitperiod},
+         given={Holger},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=TS}{%
+         family={Tietsche},
+         familyi={T\bibinitperiod},
+         given={Steffen},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=MWA}{%
+         family={Müller},
+         familyi={M\bibinitperiod},
+         given={Wolfgang\bibnamedelima A},
+         giveni={W\bibinitperiod\bibinitdelim A\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{BJ+1}
+    \strng{fullhash}{BJFKBMDDIKLNDPRPHTSMWA1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2015}
+    \field{labeldatesource}{}
+    \field{sortinit}{B}
+    \field{sortinithash}{B}
+    \field{note}{Publisher: Springer}
+    \field{number}{9}
+    \field{pages}{2723\bibrangedash 2735}
+    \field{title}{The prediction of surface temperature in the new seasonal prediction system based on the {MPI}-{ESM} coupled climate model}
+    \field{volume}{44}
+    \field{journaltitle}{Climate Dynamics}
+    \field{year}{2015}
+  \endentry
+
+  \entry{cannon_bias_2015}{article}{}
+    \name{author}{3}{}{%
+      {{hash=CAJ}{%
+         family={Cannon},
+         familyi={C\bibinitperiod},
+         given={Alex\bibnamedelima J.},
+         giveni={A\bibinitperiod\bibinitdelim J\bibinitperiod},
+      }}%
+      {{hash=SSR}{%
+         family={Sobie},
+         familyi={S\bibinitperiod},
+         given={Stephen\bibnamedelima R.},
+         giveni={S\bibinitperiod\bibinitdelim R\bibinitperiod},
+      }}%
+      {{hash=MTQ}{%
+         family={Murdock},
+         familyi={M\bibinitperiod},
+         given={Trevor\bibnamedelima Q.},
+         giveni={T\bibinitperiod\bibinitdelim Q\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{CAJ+1}
+    \strng{fullhash}{CAJSSRMTQ1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{shorttitle}
+    \field{labelyear}{2015}
+    \field{labeldatesource}{}
+    \field{sortinit}{C}
+    \field{sortinithash}{C}
+    \field{abstract}{%
+    Quantile mapping bias correction algorithms are commonly used to correct systematic distributional biases in precipitation outputs from climate models. Although they are effective at removing historical biases relative to observations, it has been found that quantile mapping can artiﬁcially corrupt future model-projected trends. Previous studies on the modiﬁcation of precipitation trends by quantile mapping have focused on mean quantities, with less attention paid to extremes. This article investigates the extent to which quantile mapping algorithms modify global climate model (GCM) trends in mean precipitation and precipitation extremes indices. First, a bias correction algorithm, quantile delta mapping (QDM), that explicitly preserves relative changes in precipitation quantiles is presented. QDM is compared on synthetic data with detrended quantile mapping (DQM), which is designed to preserve trends in the mean, and with standard quantile mapping (QM). Next, methods are applied to phase 5 of the Coupled Model Intercomparison Project (CMIP5) daily precipitation projections over Canada. Performance is assessed based on precipitation extremes indices and results from a generalized extreme value analysis applied to annual precipitation maxima. QM can inﬂate the magnitude of relative trends in precipitation extremes with respect to the raw GCM, often substantially, as compared to DQM and especially QDM. The degree of corruption in the GCM trends by QM is particularly large for changes in long period return values. By the 2080s, relative changes in excess of 1500\% with respect to historical conditions are noted at some locations for 20-yr return values, with maximum changes by DQM and QDM nearing 1240\% and 1140\%, respectively, whereas raw GCM changes are never projected to exceed 1120\%.%
+    }
+    \verb{doi}
+    \verb 10.1175/JCLI-D-14-00754.1
+    \endverb
+    \field{issn}{0894-8755, 1520-0442}
+    \field{number}{17}
+    \field{pages}{6938\bibrangedash 6959}
+    \field{shorttitle}{Bias {Correction} of {GCM} {Precipitation} by {Quantile} {Mapping}}
+    \field{title}{Bias {Correction} of {GCM} {Precipitation} by {Quantile} {Mapping}: {How} {Well} {Do} {Methods} {Preserve} {Changes} in {Quantiles} and {Extremes}?}
+    \verb{url}
+    \verb http://journals.ametsoc.org/doi/10.1175/JCLI-D-14-00754.1
+    \endverb
+    \field{volume}{28}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/PKYEXSUD/Cannon et al. - 2015 - Bias C
+    \verb orrection of GCM Precipitation by Quantile Mapping How Well Do Method
+    \verb s Preserve Changes in Qu.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Journal of Climate}
+    \field{month}{09}
+    \field{year}{2015}
+    \field{urlday}{13}
+    \field{urlmonth}{04}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{chen_xgboost_2016}{inproceedings}{}
+    \name{author}{2}{}{%
+      {{hash=CT}{%
+         family={Chen},
+         familyi={C\bibinitperiod},
+         given={Tianqi},
+         giveni={T\bibinitperiod},
+      }}%
+      {{hash=GC}{%
+         family={Guestrin},
+         familyi={G\bibinitperiod},
+         given={Carlos},
+         giveni={C\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \list{publisher}{1}{%
+      {ACM}%
+    }
+    \strng{namehash}{CTGC1}
+    \strng{fullhash}{CTGC1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{shorttitle}
+    \field{labelyear}{2016}
+    \field{labeldatesource}{}
+    \field{sortinit}{C}
+    \field{sortinithash}{C}
+    \field{abstract}{%
+    Tree boosting is a highly eﬀective and widely used machine learning method. In this paper, we describe a scalable endto-end tree boosting system called XGBoost, which is used widely by data scientists to achieve state-of-the-art results on many machine learning challenges. We propose a novel sparsity-aware algorithm for sparse data and weighted quantile sketch for approximate tree learning. More importantly, we provide insights on cache access patterns, data compression and sharding to build a scalable tree boosting system. By combining these insights, XGBoost scales beyond billions of examples using far fewer resources than existing systems.%
+    }
+    \field{booktitle}{Proceedings of the 22nd {ACM} {SIGKDD} {International} {Conference} on {Knowledge} {Discovery} and {Data} {Mining}}
+    \verb{doi}
+    \verb 10.1145/2939672.2939785
+    \endverb
+    \field{isbn}{978-1-4503-4232-2}
+    \field{pages}{785\bibrangedash 794}
+    \field{shorttitle}{{XGBoost}}
+    \field{title}{{XGBoost}: {A} {Scalable} {Tree} {Boosting} {System}}
+    \verb{url}
+    \verb https://dl.acm.org/doi/10.1145/2939672.2939785
+    \endverb
+    \list{location}{1}{%
+      {San Francisco California USA}%
+    }
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/CL58PLAG/Chen and Guestrin - 2016 - XG
+    \verb Boost A Scalable Tree Boosting System.pdf:application/pdf
+    \endverb
+    \field{month}{08}
+    \field{year}{2016}
+    \field{urlday}{16}
+    \field{urlmonth}{04}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{das_evaluation_2022}{article}{}
+    \name{author}{3}{}{%
+      {{hash=DP}{%
+         family={Das},
+         familyi={D\bibinitperiod},
+         given={Priyanko},
+         giveni={P\bibinitperiod},
+      }}%
+      {{hash=ZZ}{%
+         family={Zhang},
+         familyi={Z\bibinitperiod},
+         given={Zhenke},
+         giveni={Z\bibinitperiod},
+      }}%
+      {{hash=RH}{%
+         family={Ren},
+         familyi={R\bibinitperiod},
+         given={Hang},
+         giveni={H\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{DP+1}
+    \strng{fullhash}{DPZZRH1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2022}
+    \field{labeldatesource}{}
+    \field{sortinit}{D}
+    \field{sortinithash}{D}
+    \field{abstract}{%
+    This study evaluates the performance of four bias correction methods based on CORDEX (coordinated regional climate downscaling experiment) domain six regional climate models (RCMs) at the Mara River Basin. A suitable bias correction method was considered to develop the future climate scenario. The performance of bias correction methods was evaluated by various statistical metrics based on the historical period and revealed that the distribution mapping (DM) techniques have strong performance under the different climatic conditions. The effectiveness of the DM method is found to be better at capturing the coefﬁcient of variation and standard deviation of observed rainfall and temperature. Therefore, this study considers the future climate (2026–2095) from bias-corrected RCMs output using DM techniques. The results from bias-adjusted RCMs show an increase of rainfall (þ118.3\%) and temperature (þ2.91) in the future climate under Representative Concentration Pathways (RCPs) 2.6, 4.5 and 8.5. In addition, this study tested the random forest (RF) method to determine the capacity of each bias-corrected RCMs for reproducing the future rainfall and temperature under the RCP 4.5 and RCP 8.5 scenario. The results demonstrate that the RF can reproduce the climate variable with its average correlation (R2) of 0.93 for rainfall and 0.95 for temperature.%
+    }
+    \verb{doi}
+    \verb 10.2166/wcc.2022.299
+    \endverb
+    \field{issn}{2040-2244, 2408-9354}
+    \field{number}{4}
+    \field{pages}{1900\bibrangedash 1919}
+    \field{title}{Evaluation of four bias correction methods and random forest model for climate change projection in the {Mara} {River} {Basin}, {East} {Africa}}
+    \verb{url}
+    \verb https://iwaponline.com/jwcc/article/13/4/1900/87422/Evaluation-of-fou
+    \verb r-bias-correction-methods-and
+    \endverb
+    \field{volume}{13}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/BHJKZM3L/Das et al. - 2022 - Evaluatio
+    \verb n of four bias correction methods and random forest model for climate
+    \verb  change projection in.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Journal of Water and Climate Change}
+    \field{month}{04}
+    \field{year}{2022}
+    \field{urlday}{31}
+    \field{urlmonth}{03}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{enayati_bias_2021}{article}{}
+    \name{author}{5}{}{%
+      {{hash=EM}{%
+         family={Enayati},
+         familyi={E\bibinitperiod},
+         given={Maedeh},
+         giveni={M\bibinitperiod},
+      }}%
+      {{hash=BHO}{%
+         family={Bozorg-Haddad},
+         familyi={B\bibinithyphendelim H\bibinitperiod},
+         given={Omid},
+         giveni={O\bibinitperiod},
+      }}%
+      {{hash=BJ}{%
+         family={Bazrafshan},
+         familyi={B\bibinitperiod},
+         given={Javad},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=HS}{%
+         family={Hejabi},
+         familyi={H\bibinitperiod},
+         given={Somayeh},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=CX}{%
+         family={Chu},
+         familyi={C\bibinitperiod},
+         given={Xuefeng},
+         giveni={X\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{EM+1}
+    \strng{fullhash}{EMBHOBJHSCX1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2021}
+    \field{labeldatesource}{}
+    \field{sortinit}{E}
+    \field{sortinithash}{E}
+    \field{abstract}{%
+    This study aims to conduct a thorough investigation to compare the abilities of quantile mapping (QM) techniques as a bias correction method for the raw outputs from general circulation model (GCM)/ regional climate model (RCM) combinations. The Karkheh River basin in Iran was selected as a case study, due to its diverse topographic features, to test the performances of the bias correction methods under different conditions. The outputs of two GCM/RCM combinations (ICHEC and NOAA-ESM) were acquired from the coordinated regional climate downscaling experiment (CORDEX) dataset for this study. The results indicated that the performances of the QMs varied, depending on the transformation functions, parameter sets, and topographic conditions. In some cases, the QMs’ adjustments even made the GCM/RCM combinations’ raw outputs worse. The result of this study suggested that apart from DIST, PTF:scale, and SSPLIN, the rest of the considered QM methods can provide relatively improved results for both rainfall and temperature variables. It should be noted that, according to the results obtained from the diverse topographic conditions of the sub-basins, the empirical quantiles (QUANT) and robust empirical quantiles (RQUANT) methods proved to be excellent options to correct the bias of rainfall data, while all bias correction methods, with the notable exceptions of performed PTF:scale and SSPLIN, performed relatively well for the temperature variable.%
+    }
+    \verb{doi}
+    \verb 10.2166/wcc.2020.261
+    \endverb
+    \field{issn}{2040-2244, 2408-9354}
+    \field{number}{2}
+    \field{pages}{401\bibrangedash 419}
+    \field{title}{Bias correction capabilities of quantile mapping methods for rainfall and temperature variables}
+    \verb{url}
+    \verb https://iwaponline.com/jwcc/article/12/2/401/74161/Bias-correction-ca
+    \verb pabilities-of-quantile-mapping
+    \endverb
+    \field{volume}{12}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/UWC3R8H8/Enayati et al. - 2021 - Bias
+    \verb correction capabilities of quantile mapping methods for rainfall and
+    \verb temperature variables.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Journal of Water and Climate Change}
+    \field{month}{03}
+    \field{year}{2021}
+    \field{urlday}{13}
+    \field{urlmonth}{04}
+    \field{urlyear}{2026}
+  \endentry
+
   \entry{feng_bias_2024}{article}{}
     \name{author}{6}{}{%
       {{hash=FS}{%
@@ -178,6 +507,99 @@
     \field{year}{2021}
   \endentry
 
+  \entry{hajjem_mixed_2011}{article}{}
+    \name{author}{3}{}{%
+      {{hash=HA}{%
+         family={Hajjem},
+         familyi={H\bibinitperiod},
+         given={Ahlem},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=BF}{%
+         family={Bellavance},
+         familyi={B\bibinitperiod},
+         given={François},
+         giveni={F\bibinitperiod},
+      }}%
+      {{hash=LD}{%
+         family={Larocque},
+         familyi={L\bibinitperiod},
+         given={Denis},
+         giveni={D\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{HA+1}
+    \strng{fullhash}{HABFLD1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2011}
+    \field{labeldatesource}{}
+    \field{sortinit}{H}
+    \field{sortinithash}{H}
+    \field{note}{Publisher: Elsevier}
+    \field{number}{4}
+    \field{pages}{451\bibrangedash 459}
+    \field{title}{Mixed effects regression trees for clustered data}
+    \field{volume}{81}
+    \field{journaltitle}{Statistics \& probability letters}
+    \field{year}{2011}
+  \endentry
+
+  \entry{hajjem_mixed-effects_2014}{article}{}
+    \name{author}{3}{}{%
+      {{hash=HA}{%
+         family={Hajjem},
+         familyi={H\bibinitperiod},
+         given={Ahlem},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=BF}{%
+         family={Bellavance},
+         familyi={B\bibinitperiod},
+         given={François},
+         giveni={F\bibinitperiod},
+      }}%
+      {{hash=LD}{%
+         family={Larocque},
+         familyi={L\bibinitperiod},
+         given={Denis},
+         giveni={D\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{HA+1}
+    \strng{fullhash}{HABFLD1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2014}
+    \field{labeldatesource}{}
+    \field{sortinit}{H}
+    \field{sortinithash}{H}
+    \verb{doi}
+    \verb 10.1080/00949655.2012.741599
+    \endverb
+    \field{issn}{0094-9655, 1563-5163}
+    \field{number}{6}
+    \field{pages}{1313\bibrangedash 1328}
+    \field{title}{Mixed-effects random forest for clustered data}
+    \verb{url}
+    \verb http://www.tandfonline.com/doi/abs/10.1080/00949655.2012.741599
+    \endverb
+    \field{volume}{84}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/UVM8SZ8N/Hajjem et al. - 2014 - Mixed-
+    \verb effects random forest for clustered data.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{Journal of Statistical Computation and Simulation}
+    \field{month}{06}
+    \field{year}{2014}
+    \field{urlday}{21}
+    \field{urlmonth}{04}
+    \field{urlyear}{2026}
+  \endentry
+
   \entry{hao_seasonal_2018}{article}{}
     \name{author}{3}{}{%
       {{hash=HZ}{%
@@ -238,62 +660,6 @@
     \field{urlyear}{2025}
   \endentry
 
-  \entry{kadow_artificial_2020}{article}{}
-    \name{author}{3}{}{%
-      {{hash=KC}{%
-         family={Kadow},
-         familyi={K\bibinitperiod},
-         given={Christopher},
-         giveni={C\bibinitperiod},
-      }}%
-      {{hash=HDM}{%
-         family={Hall},
-         familyi={H\bibinitperiod},
-         given={David\bibnamedelima Matthew},
-         giveni={D\bibinitperiod\bibinitdelim M\bibinitperiod},
-      }}%
-      {{hash=UU}{%
-         family={Ulbrich},
-         familyi={U\bibinitperiod},
-         given={Uwe},
-         giveni={U\bibinitperiod},
-      }}%
-    }
-    \list{language}{1}{%
-      {en}%
-    }
-    \strng{namehash}{KC+1}
-    \strng{fullhash}{KCHDMUU1}
-    \field{labelnamesource}{author}
-    \field{labeltitlesource}{title}
-    \field{labelyear}{2020}
-    \field{labeldatesource}{}
-    \field{sortinit}{K}
-    \field{sortinithash}{K}
-    \verb{doi}
-    \verb 10.1038/s41561-020-0582-5
-    \endverb
-    \field{issn}{1752-0894, 1752-0908}
-    \field{number}{6}
-    \field{pages}{408\bibrangedash 413}
-    \field{title}{Artificial intelligence reconstructs missing climate information}
-    \verb{url}
-    \verb https://www.nature.com/articles/s41561-020-0582-5
-    \endverb
-    \field{volume}{13}
-    \verb{file}
-    \verb PDF:/home/simon/Zotero/storage/D7JXDVZQ/Kadow et al. - 2020 - Artific
-    \verb ial intelligence reconstructs missing climate information.pdf:applica
-    \verb tion/pdf
-    \endverb
-    \field{journaltitle}{Nature Geoscience}
-    \field{month}{06}
-    \field{year}{2020}
-    \field{urlday}{03}
-    \field{urlmonth}{01}
-    \field{urlyear}{2026}
-  \endentry
-
   \entry{karsisto_post-processing_2025}{misc}{}
     \name{author}{1}{}{%
       {{hash=KV}{%
@@ -332,71 +698,6 @@
     \field{year}{2025}
     \field{urlday}{31}
     \field{urlmonth}{03}
-    \field{urlyear}{2026}
-  \endentry
-
-  \entry{lentz_improving_2025}{article}{}
-    \name{author}{4}{}{%
-      {{hash=LS}{%
-         family={Lentz},
-         familyi={L\bibinitperiod},
-         given={Simon},
-         giveni={S\bibinitperiod},
-      }}%
-      {{hash=BS}{%
-         family={Brune},
-         familyi={B\bibinitperiod},
-         given={Sebastian},
-         giveni={S\bibinitperiod},
-      }}%
-      {{hash=KC}{%
-         family={Kadow},
-         familyi={K\bibinitperiod},
-         given={Christopher},
-         giveni={C\bibinitperiod},
-      }}%
-      {{hash=BJ}{%
-         family={Baehr},
-         familyi={B\bibinitperiod},
-         given={Johanna},
-         giveni={J\bibinitperiod},
-      }}%
-    }
-    \list{language}{1}{%
-      {en}%
-    }
-    \strng{namehash}{LS+1}
-    \strng{fullhash}{LSBSKCBJ1}
-    \field{labelnamesource}{author}
-    \field{labeltitlesource}{title}
-    \field{labelyear}{2025}
-    \field{labeldatesource}{}
-    \field{sortinit}{L}
-    \field{sortinithash}{L}
-    \field{abstract}{%
-    Oceanic subsurface observations are sparse and lead to large uncertainties in any model-based estimate. We investigate the applicability of transfer learning based neural networks to reconstruct North Atlantic temperatures in times with sparse observations. Our network is trained on a time period with abundant observations to learn realistic physical behavior. Evaluating it within a consistent data assimilation framework, this network learns and reproduces its training data’s physical patterns. Additionally, the network is able to transfer these patterns towards a historical ocean heat content estimate in times with sparse observations. Consequently, with infrequent input data, machine learning reconstructions exhibit similar physical structures, while correcting for known errors compared to state-of-the-art data assimilation products. In this manner, transfer learning can impact the initialization and evaluation of climate hindcasts. Furthermore, by exhibiting the capability to accurately transfer results from high to low-frequencies, transfer learning based neural networks showcase their relevance in mixed-frequency measurements beyond climate science.%
-    }
-    \verb{doi}
-    \verb 10.1038/s41598-025-86374-4
-    \endverb
-    \field{issn}{2045-2322}
-    \field{number}{1}
-    \field{pages}{2640}
-    \field{title}{Improving ocean reanalyses of observationally sparse regions with transfer learning}
-    \verb{url}
-    \verb https://www.nature.com/articles/s41598-025-86374-4
-    \endverb
-    \field{volume}{15}
-    \verb{file}
-    \verb PDF:/home/simon/Zotero/storage/NALEF2A6/Lentz et al. - 2025 - Improvi
-    \verb ng ocean reanalyses of observationally sparse regions with transfer l
-    \verb earning.pdf:application/pdf
-    \endverb
-    \field{journaltitle}{Scientific Reports}
-    \field{month}{01}
-    \field{year}{2025}
-    \field{urlday}{03}
-    \field{urlmonth}{01}
     \field{urlyear}{2026}
   \endentry
 
@@ -476,84 +777,39 @@
     \field{urlyear}{2025}
   \endentry
 
-  \entry{liu_image_2018}{misc}{}
-    \name{author}{6}{}{%
+  \entry{louppe_understanding_2014}{thesis}{}
+    \name{author}{1}{}{%
       {{hash=LG}{%
-         family={Liu},
+         family={Louppe},
          familyi={L\bibinitperiod},
-         given={Guilin},
+         given={Gilles},
          giveni={G\bibinitperiod},
-      }}%
-      {{hash=RFA}{%
-         family={Reda},
-         familyi={R\bibinitperiod},
-         given={Fitsum\bibnamedelima A.},
-         giveni={F\bibinitperiod\bibinitdelim A\bibinitperiod},
-      }}%
-      {{hash=SKJ}{%
-         family={Shih},
-         familyi={S\bibinitperiod},
-         given={Kevin\bibnamedelima J.},
-         giveni={K\bibinitperiod\bibinitdelim J\bibinitperiod},
-      }}%
-      {{hash=WTC}{%
-         family={Wang},
-         familyi={W\bibinitperiod},
-         given={Ting-Chun},
-         giveni={T\bibinithyphendelim C\bibinitperiod},
-      }}%
-      {{hash=TA}{%
-         family={Tao},
-         familyi={T\bibinitperiod},
-         given={Andrew},
-         giveni={A\bibinitperiod},
-      }}%
-      {{hash=CB}{%
-         family={Catanzaro},
-         familyi={C\bibinitperiod},
-         given={Bryan},
-         giveni={B\bibinitperiod},
       }}%
     }
     \list{language}{1}{%
       {en}%
     }
-    \list{publisher}{1}{%
-      {arXiv}%
-    }
-    \keyw{Computer Science - Computer Vision and Pattern Recognition}
-    \strng{namehash}{LG+1}
-    \strng{fullhash}{LGRFASKJWTCTACB1}
+    \strng{namehash}{LG1}
+    \strng{fullhash}{LG1}
     \field{labelnamesource}{author}
     \field{labeltitlesource}{title}
-    \field{labelyear}{2018}
+    \field{labelyear}{2014}
     \field{labeldatesource}{}
     \field{sortinit}{L}
     \field{sortinithash}{L}
-    \field{abstract}{%
-    Existing deep learning based image inpainting methods use a standard convolutional network over the corrupted image, using convolutional ﬁlter responses conditioned on both valid pixels as well as the substitute values in the masked holes (typically the mean value). This often leads to artifacts such as color discrepancy and blurriness. Postprocessing is usually used to reduce such artifacts, but are expensive and may fail. We propose the use of partial convolutions, where the convolution is masked and renormalized to be conditioned on only valid pixels. We further include a mechanism to automatically generate an updated mask for the next layer as part of the forward pass. Our model outperforms other methods for irregular masks. We show qualitative and quantitative comparisons with other methods to validate our approach.%
+    \field{title}{Understanding {Random} {Forests}}
+    \list{location}{1}{%
+      {Liège}%
     }
-    \verb{doi}
-    \verb 10.48550/arXiv.1804.07723
-    \endverb
-    \field{note}{arXiv:1804.07723 [cs]}
-    \field{title}{Image {Inpainting} for {Irregular} {Holes} {Using} {Partial} {Convolutions}}
-    \verb{url}
-    \verb http://arxiv.org/abs/1804.07723
-    \endverb
+    \list{institution}{1}{%
+      {University of Liège}%
+    }
     \verb{file}
-    \verb PDF:/home/simon/Zotero/storage/8I3MMMRZ/Liu et al. - 2018 - Image Inp
-    \verb ainting for Irregular Holes Using Partial Convolutions.pdf:applicatio
-    \verb n/pdf
+    \verb PDF:/home/simon/Zotero/storage/7SM9YWM6/Louppe - Understanding Random
+    \verb  Forests.pdf:application/pdf
     \endverb
-    \field{annotation}{%
-    Comment: Update: camera-ready; L1 loss is size-averaged; code of partial conv layer: https://github.com/NVIDIA/partialconv. Published at ECCV 2018%
-    }
-    \field{month}{12}
-    \field{year}{2018}
-    \field{urlday}{03}
-    \field{urlmonth}{01}
-    \field{urlyear}{2026}
+    \field{type}{phdthesis}
+    \field{year}{2014}
   \endentry
 
   \entry{maidment_tamsat_2020}{incollection}{}
@@ -600,81 +856,118 @@
     \field{year}{2020}
   \endentry
 
-  \entry{paxian_dwd_2023}{article}{}
-    \name{author}{10}{}{%
-      {{hash=PA}{%
-         family={Paxian},
-         familyi={P\bibinitperiod},
-         given={A},
-         giveni={A},
-      }}%
-      {{hash=MB}{%
-         family={Mannig},
-         familyi={M\bibinitperiod},
-         given={B},
-         giveni={B},
-      }}%
-      {{hash=TM}{%
-         family={Tivig},
-         familyi={T\bibinitperiod},
-         given={M},
-         giveni={M},
-      }}%
-      {{hash=RK}{%
-         family={Reinhardt},
+  \entry{raeesi_using_2024}{article}{}
+    \name{author}{6}{}{%
+      {{hash=RM}{%
+         family={Raeesi},
          familyi={R\bibinitperiod},
-         given={K},
-         giveni={K},
+         given={Maryam},
+         giveni={M\bibinitperiod},
       }}%
-      {{hash=IK}{%
-         family={Isensee},
-         familyi={I\bibinitperiod},
-         given={K},
-         giveni={K},
+      {{hash=ZAA}{%
+         family={Zolfaghari},
+         familyi={Z\bibinitperiod},
+         given={Ali\bibnamedelima Asghar},
+         giveni={A\bibinitperiod\bibinitdelim A\bibinitperiod},
       }}%
-      {{hash=PA}{%
-         family={Pasternack},
-         familyi={P\bibinitperiod},
-         given={Alexander},
-         giveni={A\bibinitperiod},
+      {{hash=KSH}{%
+         family={Kaboli},
+         familyi={K\bibinitperiod},
+         given={Seyed\bibnamedelima Hasan},
+         giveni={S\bibinitperiod\bibinitdelim H\bibinitperiod},
       }}%
-      {{hash=HA}{%
-         family={Hoff},
-         familyi={H\bibinitperiod},
-         given={A},
-         giveni={A},
+      {{hash=RM}{%
+         family={Rahimi},
+         familyi={R\bibinitperiod},
+         given={Mohammad},
+         giveni={M\bibinitperiod},
       }}%
-      {{hash=PK}{%
-         family={Pankatz},
-         familyi={P\bibinitperiod},
-         given={K},
-         giveni={K},
+      {{hash=DVJ}{%
+         family={De\bibnamedelima Vente},
+         familyi={D\bibinitperiod\bibinitdelim V\bibinitperiod},
+         given={Joris},
+         giveni={J\bibinitperiod},
       }}%
-      {{hash=BS}{%
-         family={Buchholz},
-         familyi={B\bibinitperiod},
-         given={S},
-         giveni={S},
-      }}%
-      {{hash=WS}{%
-         family={Wehring},
-         familyi={W\bibinitperiod},
-         given={S},
-         giveni={S},
+      {{hash=EJPC}{%
+         family={Eekhout},
+         familyi={E\bibinitperiod},
+         given={Joris P.\bibnamedelima C.},
+         giveni={J\bibinitperiod\bibinitdelim P\bibinitperiod\bibinitdelim C\bibinitperiod},
       }}%
     }
-    \strng{namehash}{PA+1}
-    \strng{fullhash}{PAMBTMRKIKPAHAPKBSWS1}
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{RM+1}
+    \strng{fullhash}{RMZAAKSHRMDVJEJPC1}
     \field{labelnamesource}{author}
-    \field{labeltitlesource}{title}
+    \field{labeltitlesource}{shorttitle}
+    \field{labelyear}{2024}
+    \field{labeldatesource}{}
+    \field{sortinit}{R}
+    \field{sortinithash}{R}
+    \field{abstract}{%
+    Abstract Climate change is expected to cause important changes in precipitation patterns in Iran until the end of 21st century. This study aims at evaluating projections of climate change over Iran by using five climate model outputs (including ACCESS‐ESM1‐5, BCC‐CSM2‐MR, CanESM5, CMCC‐ESM2 and MRI‐ESM2‐0) of the Coupled Model Intercomparison Project phase 6 (CMIP6), and performing bias‐correction using a novel combination of quantile mapping (QM) and random forest (RF) between the years 2015 and 2100 under three shared socioeconomics pathways (SSP2‐4.5, SSP3‐7.0 and SSP5‐8.5). First, bias‐correction was performed on ERA5‐Land reanalysis data as reference period (1990–2020) using the QM method, then the corrected ERA5‐Land reanalysis data was considered as measured data. Based on the corrected ERA5‐Land reanalysis data (1990–2020) and historical simulations (1990–2014), the future projections (2015–2100) were also bias‐corrected utilizing the QM method. Next, the accuracy of the QM method was validated by comparing the corrected ERA5‐Land reanalysis data with model outputs for overlapping years between 2015 and 2020. This comparison revealed persistent biases; hence, a combination of QM‐RF method was applied to rectify future climate projections until the end of the 21st century. Based on the QM result, CMCC‐ESM2 revealed the highest RMSE in both SSP2‐4.5 and SSP3‐7.0 amounting to 331.74 and 201.84 mm·year −1 , respectively. Particularly, the exclusive use of the QM method displayed substantial errors in projecting annual precipitation based on SSP5‐8.5, notably in the case of ACCESS‐ESM1‐5 (RMSE = 431.39 mm·year −1 ), while the RMSE reduced after using QM‐RF method (197.75 mm·year −1 ). Obviously, a significant enhancement in results was observed upon implementing the QM‐RF combination method in CMCC‐ESM2 under both SSP2‐4.5 (RMSE = 139.30 mm·year −1 ) and SSP3‐7.0 (RMSE = 151.43 mm·year −1 ) showcasing approximately reduction in RMSE values by 192.43 and 50.41 mm·year −1 , respectively. Although each bias‐corrected model output was evaluated individually, multi‐model ensemble (MME) was also created to project the annual future precipitation pattern in Iran. By considering that combination of QM‐RF method revealed the lower errors in correcting model outputs, we used the QM‐RF technique to create the MME. Based on SSP2‐4.5, the MME climate projections highlight imminent precipitation reductions ({\textgreater}10\%) across large regions of Iran, conversely projecting increases ranging from 10\% to over 20\% in southern areas under SSP3‐7.0. Moreover, MME projected dramatic declines under SSP5‐8.5, especially impacting central, eastern, and northwest Iran. Notably, the most pronounced possibly decline patterns are projected for arid regions (central plateau) and eastern areas under SSP2‐4.5, SSP3‐7.0 and SSP5‐8.5.%
+    }
+    \verb{doi}
+    \verb 10.1002/joc.8593
+    \endverb
+    \field{issn}{0899-8418, 1097-0088}
+    \field{number}{12}
+    \field{pages}{4495\bibrangedash 4514}
+    \field{shorttitle}{Using quantile mapping and random forest for bias‐correction of high‐resolution reanalysis precipitation data and {\textless}span style="font-variant}
+    \field{title}{Using quantile mapping and random forest for bias‐correction of high‐resolution reanalysis precipitation data and {\textless}span style="font-variant:small-caps;"{\textgreater}{CMIP6}{\textless}/span{\textgreater} climate projections over {Iran}}
+    \verb{url}
+    \verb https://rmets.onlinelibrary.wiley.com/doi/10.1002/joc.8593
+    \endverb
+    \field{volume}{44}
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/WG35I6UW/Raeesi et al. - 2024 - Using
+    \verb quantile mapping and random forest for bias‐correction of high‐re
+    \verb solution reanalysis precipita.pdf:application/pdf
+    \endverb
+    \field{journaltitle}{International Journal of Climatology}
+    \field{month}{10}
+    \field{year}{2024}
+    \field{urlday}{15}
+    \field{urlmonth}{04}
+    \field{urlyear}{2026}
+  \endentry
+
+  \entry{schwertfeger_python_2023}{misc}{}
+    \name{author}{1}{}{%
+      {{hash=SB}{%
+         family={Schwertfeger},
+         familyi={S\bibinitperiod},
+         given={Benjamin},
+         giveni={B\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \strng{namehash}{SB1}
+    \strng{fullhash}{SB1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{shorttitle}
     \field{labelyear}{2023}
     \field{labeldatesource}{}
-    \field{sortinit}{P}
-    \field{sortinithash}{P}
-    \field{title}{The {DWD} climate predictions website: {Towards} a seamless outlook based on subseasonal, seasonal and decadal predictions}
-    \field{volume}{30}
-    \field{journaltitle}{Climate Services}
+    \field{sortinit}{S}
+    \field{sortinithash}{S}
+    \field{shorttitle}{Bias {Correction} {Methods}}
+    \field{title}{Python {Cmethods}: {Bias} {Correction} {Methods}}
+    \verb{url}
+    \verb https://python-cmethods.readthedocs.io/en/stable/methods.html
+    \endverb
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/EMNVQ7BE/Teutschbein and Seibert - 201
+    \verb 2 - Bias correction of regional climate model simulations for hydrolo
+    \verb gical climate-change impact studies.pdf:application/pdf
+    \endverb
     \field{year}{2023}
+    \field{urlday}{13}
+    \field{urlmonth}{04}
+    \field{urlyear}{2026}
   \endentry
 
   \entry{soci_era5_2024}{article}{}
@@ -850,6 +1143,81 @@
     \endverb
     \field{type}{phdthesis}
     \field{year}{2023}
+  \endentry
+
+  \entry{valecha_prediction_2018}{inproceedings}{}
+    \name{author}{5}{}{%
+      {{hash=VH}{%
+         family={Valecha},
+         familyi={V\bibinitperiod},
+         given={Harsh},
+         giveni={H\bibinitperiod},
+      }}%
+      {{hash=VA}{%
+         family={Varma},
+         familyi={V\bibinitperiod},
+         given={Aparna},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=KI}{%
+         family={Khare},
+         familyi={K\bibinitperiod},
+         given={Ishita},
+         giveni={I\bibinitperiod},
+      }}%
+      {{hash=SA}{%
+         family={Sachdeva},
+         familyi={S\bibinitperiod},
+         given={Aakash},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=GM}{%
+         family={Goyal},
+         familyi={G\bibinitperiod},
+         given={Mukta},
+         giveni={M\bibinitperiod},
+      }}%
+    }
+    \list{language}{1}{%
+      {en}%
+    }
+    \list{publisher}{1}{%
+      {IEEE}%
+    }
+    \strng{namehash}{VH+1}
+    \strng{fullhash}{VHVAKISAGM1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{labelyear}{2018}
+    \field{labeldatesource}{}
+    \field{sortinit}{V}
+    \field{sortinithash}{V}
+    \field{abstract}{%
+    In the ultramodern age of technology, anticipation of market trend is very important to observe consumer behaviour in this competitive world as trends are volatile. Building on developments in machine learning and prior work in the science of behaviour prediction, we construct a model designed to predict the behaviour of Consumer. The aim of this research paper is to examine the relation between consumer behaviour parameters and willingness to buy. First we investigate to find relationship between consumer behaviour to buy products on changing parameters such as environmental factor, organizational factor, individual factor and interpersonal factor . Thus this paper proposes time-evolving random forest classifier that leverages unique feature engineering to predict the behaviour of consumer that affect the choice of purchasing the product significantly. Results of random forest classifier are more accurate than other machine learning algorithm.%
+    }
+    \field{booktitle}{2018 5th {IEEE} {Uttar} {Pradesh} {Section} {International} {Conference} on {Electrical}, {Electronics} and {Computer} {Engineering} ({UPCON})}
+    \verb{doi}
+    \verb 10.1109/UPCON.2018.8597070
+    \endverb
+    \field{isbn}{978-1-5386-5002-8}
+    \field{pages}{1\bibrangedash 6}
+    \field{title}{Prediction of {Consumer} {Behaviour} using {Random} {Forest} {Algorithm}}
+    \verb{url}
+    \verb https://ieeexplore.ieee.org/document/8597070/
+    \endverb
+    \list{location}{1}{%
+      {Gorakhpur}%
+    }
+    \verb{file}
+    \verb PDF:/home/simon/Zotero/storage/JHY6FAFG/Valecha et al. - 2018 - Predi
+    \verb ction of Consumer Behaviour using Random Forest Algorithm.pdf:applica
+    \verb tion/pdf
+    \endverb
+    \field{month}{11}
+    \field{year}{2018}
+    \field{urlday}{15}
+    \field{urlmonth}{04}
+    \field{urlyear}{2026}
   \endentry
 
   \entry{wu_dynamic-lstm_2022}{article}{}

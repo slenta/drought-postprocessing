@@ -2,12 +2,22 @@
 \contentsline {chapter}{\numberline {1}Introcution: Hybrid approaches to seasonal drought prediction}{1}{chapter.1}%
 \contentsline {chapter}{\numberline {2}Data and methods}{2}{chapter.2}%
 \contentsline {section}{\numberline {2.1}Data}{2}{section.2.1}%
-\contentsline {subsection}{\numberline {2.1.1}The GCFS Seasonal Forecast System}{2}{subsection.2.1.1}%
-\contentsline {section}{\numberline {2.2}Methods}{3}{section.2.2}%
-\contentsline {section}{\numberline {2.3}Daten}{4}{section.2.3}%
-\contentsline {chapter}{\numberline {3}Erwartete Ergebnisse: Verbesserung von saisonalen Vorhersagen und die Überbrückung von Beobachtungs-Vorhersage Lücken}{4}{chapter.3}%
-\contentsline {chapter}{\numberline {4}Geplante Vorgehensweise und Vorläufiger Zeitplan}{5}{chapter.4}%
-\contentsline {section}{\numberline {4.1}Summary}{5}{section.4.1}%
-\contentsline {section}{\numberline {4.2}Conclusion}{5}{section.4.2}%
-\contentsline {chapter}{\numberline {5}Literatur}{7}{chapter.5}%
+\contentsline {subsection}{\numberline {2.1.1}The GCFS Seasonal Forecast System}{3}{subsection.2.1.1}%
+\contentsline {subsection}{\numberline {2.1.2}The ERA5 reanalysis temperature dataset}{4}{subsection.2.1.2}%
+\contentsline {subsection}{\numberline {2.1.3}Data Preprocessing}{4}{subsection.2.1.3}%
+\contentsline {section}{\numberline {2.2}Methods}{5}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}Statistical Quantile Mapping}{5}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}Residual correction with mixed effect random forests}{6}{subsection.2.2.2}%
+\contentsline {subsubsection}{\nonumberline Random Forest Machine Learning Models}{6}{subsubsection*.4}%
+\contentsline {subsubsection}{\nonumberline Gradient Boosting with XGBoost}{8}{subsubsection*.6}%
+\contentsline {subsubsection}{\nonumberline Adding Group Specific Effects with Mixed Effect Random Forests}{8}{subsubsection*.8}%
+\contentsline {chapter}{\numberline {3}Results}{9}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Setup}{9}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Quantile Mapping}{10}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Deterministic Prediction Improvement}{11}{section.3.3}%
+\contentsline {section}{\numberline {3.4}Probabilistic Prediction Improvement}{11}{section.3.4}%
+\contentsline {chapter}{\numberline {4}Discussion and Conclusion}{11}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Discussion}{11}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Conclusion}{11}{section.4.2}%
+\contentsline {chapter}{\numberline {5}Literatur}{12}{chapter.5}%
 \providecommand \tocbasic@end@toc@file {}\tocbasic@end@toc@file 
