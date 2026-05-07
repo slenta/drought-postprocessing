@@ -10,6 +10,9 @@
 
 Section \ref{methods} describes the many advantages that mixed effect boosted forests can bring as a method to the postprocessing of clustered climate data.
 Now this chapter brings the methodological concepts from section \ref{methods} together with the available data (section \ref{data}) in order to outline the step-by-step approach to the performed analysis. \\
+
+\subsection{Experimental Setup}
+
 At first, all data is preprocessed according to the steps described in section \ref{preprocessing} in order to gain a $CWB$ dataset for both reference and hindcast data.
 Then, the preprocessed hindcast data is quantile mapped to fit the reference data's distribution.
 Afterwards, a mixed effect ensemble tree method uses the quantile mapped hindcasts as training predictors in order to predict its residuals to the reference data $CWB$ as a target variable.
@@ -24,8 +27,22 @@ Of the 42 available years from 1983 to 2025, 4 years will be laid aside from the
 Finally, all postprocessing models will be evaluated according to their effect both on deterministic metrics such as RMSE or MAE and in regard to their probabilistic prediction of extreme events.
 Afterwards, the results of this analysis will be discussed in section \ref{discussion}.
 
+\subsection{ML setup}
 
-\section{Quantile Mapping}
+All ML models are given the same 15 predictors as an input.
+Most importantly, they receive the QM hindcast for the specific month to be processed.
+Additionally, the predictors include the 3 $CWB$ and individual precipitation and temperature timesteps of the reference data before the initialization month of the hindcast.
+Furthermore, the leadmonth, reference climatological mean and variability of the current month as well as latitude and longitude information for each gridcell are given to the ML model.
+The ML target then consists of the residual of the QM hindcast to the reference data.
+Then, the QM hindcast is added to the ML prediction of the differences to retain a final ML estimate of the $CWB$. \\
+Before deciding on a final implementation for each model, a short hyperparameter tuning is conducted.
+For the Random Forest basemodel, the hyperparameters considered include the amount of trees, the chunk size, the minimum amount of samples per leaf and the maximum amount of features considered for each tree splitting.
+For the XGBoost basemodel, the learning rate, the maximum depth of each tree and the minimum sum of instance weight needed in a tree split.
+Finally, the mixed effect implementation is tested for the effect of different grouping mechanisms, the amount of iterative implementations of the mixed and basemodel steps and the size of the nearest neighbour grouping.
+All hyperparameters are quickly evaluated in regard to their effect on the overall RMSE and BSS improvement and only the best version is presented in section \ref{results_ml}.
+
+
+\section{Quantile Mapping}\label{results_qm}
 
 The QM algorithm, described in section \ref{qm}, refittet the original GCFS Hindcast $CWB$ distributions (section \ref{gcfs}) to fit the reference observational $CWB$, calculated from the Tamsat precipitation (section \ref{tamsat}) and the ERA5 temperature dataset (section \ref{era5}).
 The main variable in statistical QM that can be varied is the amount of quantiles.
@@ -34,6 +51,8 @@ In this consideration, a larger amount of quantiles generally leads to a closer 
 There is a limit to the accuracy of quantile mapping, which is approached exponentially.
 So in order to get an amount of quantiles that stays computationally efficient while retaining close to maximal accuracy a number of different values for the amount of quantiles $n_q$ has to be tested. \\
 To evaluate the quality of the utilized QM step, both deterministic and probabilistic metrics are chosen in order to analyse the effect of the QM step on the overall as well as the extreme event prediction.
+The following results are only shown for the first leadmonth.
+Otherwise, the QM results and difference to the original hindcast might be masked by differences in the seasonality.
 
 \begin{figure}[h]
     \centering
@@ -41,35 +60,52 @@ To evaluate the quality of the utilized QM step, both deterministic and probabil
     \caption[Timeseries comparison of quantile mapping implementations]{\textbf{Timeseries comparison of quantile mapping implementations.} Quantile mapped hindcast ensemble means $CWB$ with min/max spread compared to the original GCFS hindcast and reference $CWB$ for the first leadmonth. The differeeThe original hindcast timeseries is displayed as dotted line, while the reference $CWB$ is shown in black. }\label{figure_qm_ts}
 \end{figure}
 
-Figure \ref{figure_qm_ts} illustrates two very important results.
+In addition to the general wet bias of the GCFS hindcasts, Figure \ref{figure_qm_ts} illustrates two very important results.
 On the one hand, it is visible that the QM procedure significantly reduces the mean bias in the original hindcast's estimate.
 Although it does not correct for temporal trends in interannual variability, it completely erases the mean bias over the entire 40 year period.
 On the other hand, figure \ref{figure_qm_ts} illustrates that the amount of quantiles has only very little impact on the quality of the QM estimate.
-Just by visual inspection the timeseries become indistinguishable at $n_{quantiles} > 15$.
-The same results can be established from a comparison of the $CWB$ distributions.
-
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=\textwidth]{./plots/distribution_qm_nq_compare_all_leadmonths.png}
-    \caption[$CWB$ distribution comparison of quantile mapping implementations]{\textbf{$CWB$ distribution comparison of quantile mapping implementations.} Quantile mapped hindcast ensemble mean $CWB$ distribution compared to the original GCFS hindcast (grey) and reference $CWB$ (black) for the first leadmonth.}\label{figure_qm_dist}
-\end{figure}
-
-Again, a minimal reduction is still visible up to a value of $n_{quantiles} = 15$.
-The illustration also shows that the quantile mapping does not only shift the mean distributional bias but also corrects for some distributional mismatches.
-However, it also shows the limits of the QM procedure, which cannot perfectly match the distributions towards the reference data even at very high amounts of quantiles.
+Just by visual inspection the timeseries become indistinguishable at $n_{quantiles} > 15$. \\
 Further inspection still shows a minimal reduction in root mean squared error (RMSE) for all leadmonths up to a value of $n_{quantiles} = 20$.
 Therefore, $n_{quantiles} = 20$ is chosen in order to provide the best possible input to the ML postprocessing step, while reducing the computational costs as much as possible.
+The remaining evaluation metrics are consequently only shown for this one QM implementation that is later also used for the ML postprocessing step.\\
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{./plots/ensemble_mean_qm_distribution_n20.png}
+    \caption[$CWB$ distribution effect of quantile mapping procedure]{\textbf{$CWB$ distribution effect of quantile mapping procedure.} Quantile mapped hindcast ensemble mean $CWB$ distribution (red) compared to the original GCFS hindcast (blue) and reference $CWB$ (green) for all leadmonths combined.}\label{figure_qm_dist}
+\end{figure}
+Figure \ref{figure_qm_dist} shows the effect the QM step has on the hindcast distribution.
+This depiction illustrates that the quantile mapping does not only shift the mean distributional bias but also corrects for some distributional mismatches.
+For example, the far lower tail is increased, while the shape of the lower half matches the reference distribution much better.
+This is especially visible at the local maximum around a $CWB = -250$.
+However, it also shows the limits of the QM procedure, which cannot perfectly match the distributions towards the reference data even at very high amounts of quantiles.
+Because even though the shape of the distributions are much more similar after the QM step, differences in the amplitude of the local maxima and minima remain very clear. \\
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/figure_rmse/figure_rmse.pdf}
+    \caption[$CWB$ quantile mapping RMSE change]{\textbf{$CWB$ quantile mapping RMSE change.} Quantile mapped hindcast ensemble mean $CWB$ RMSE (middle, mean 33.5) compared to the original GCFS hindcast RMSE (left, mean 50.8) for all leadmonths combined. The right panel shows the difference between both (baseline - quantile mapping).}\label{figure_qm_rmse}
+\end{figure}
+Both the distribution and the timeseries do not show any information on the spatial distribution of the improvements.
+Figure \ref{figure_qm_rmse} addresses this shortcoming and highlights that the QM step reduces the hindcast errors in form of the RMSE (equation \ref{rmse}) also spatially at nearly every grid point.
+Nonetheless, the RMSE of the quantile mapped hindcast still exhibits the same spatial patterns as the baseline hindcast RMSE.
+Notably, the RMSE is significantly higher in the tropical regions compared to the southern and northern subtropics in the original hindcasts.
+Thisrelationship is even exacerbated in the QM hindcast as the improvement in the central African tropics is lower than in the Saharan and southern African regions.
+The Difference panel on the right of Figure \ref{figure_qm_rmse} underlines this finding.
+It also shows that there are some smaller regions, in which the baseline hindcast seems to have locally high RMSEs, which the quantile mapping procedure seems to improve reasonably well, especially in the eastern tropics. \\
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/figure_meanbias/figure_meanbias.pdf}
+    \caption[$CWB$ quantile mapping mean bias change]{\textbf{$CWB$ quantile mapping mean bias change.} Quantile mapped hindcast ensemble mean $CWB$ mean bias (right, mean 0.4) compared to the original GCFS hindcast mean bias (left, mean 8.5) for all leadmonths combined.}\label{figure_qm_bias}
+\end{figure}
+Figure \ref{figure_qm_bias}, which compares the original hindcasts mean bias to that of the QM hindcast, underlines the same message.
+However, since the quantile mapping is directly designed to reduce the overall bias at each gridpoint individually, the QM hindcast shows close to no mean bias over the whole study area.
+The mean bias also illustrates that the original hindcast clearly possesses regional sign specific biases.
+As discussed in section \ref{gcfs}, the GCFS forecasts tend to overestimate the $CWB$ in the southern half of the African continent, while the northern half, including the tropics and Saharan region are estimated to be too dry. \\
+In general, the results presented in this chapter show that the QM procedure in general can significantly reduce the error and especially the time-independent biases of the original GCFS hindcasts at all grid points.
+However, it does not change the time dependent errors and retains also some of the spatial error patterns of the original GCFS hindcasts.
 
 
+\section{Results of the ML postprocessing step}\label{results_ml}
 
-
-
-\section{Deterministic Prediction Improvement}
-
-
-
-\section{Probabilistic Prediction Improvement}
 
 
 \end{document}

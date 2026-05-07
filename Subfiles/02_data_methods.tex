@@ -232,6 +232,75 @@ Therefore, MERFs should represent a viable option for the postprocessing of clim
 In this work this mixed effect approach will be combined with an XGBoost base model in order to profit from the fast and accurate learning of XGBoost models while at the same time using the mixed effect method for improving on the remaining nonlinear residuals.
 
 
+\section{Evaluation Metrics}
+
+For the evaluation of the postprocessing results, a number of evaluation methods are chosen.
+In order to analyse the impact of the utilized method on both the mean and extreme event prediction, a range of probabilistic and deterministic evaluation metrics is selected.
+The following section describes the basic concept as well as the specific implementation in this work of these different metrics.
+
+\subsection{Root Mean Squared Error}
+
+The root mean squared error (RMSE) measures the average error between two variables via
+
+\begin{align}
+    RMSE  = \sqrt{\frac{1}{n} \cdot \sum_{i=1}^{n} (\tilde{y}_i - y_i)^2} .\label{rmse}
+\end{align}
+
+In this case, $n$ denotes the amount of comparison points, while $\tilde{y}_i$ in our case stands for the prediction value and $y_i$ for the reference value at a certain grid point.
+Due to its quadratic formulation, the RMSE gives increased weight to larger errors.
+
+\subsection{Mean Bias}
+
+Similarly to the RMSE, the mean bias measures the distance between to variables:
+
+\begin{align}
+    MB = \frac{1}{n} \cdot \sum_{i=1}^{n} (\tilde{y}_i - y_i) , \label{mae}
+\end{align}
+
+where again $n$ is the amount of observations, while $\tilde{y}_i$ and $y_i$ are the two compared variables, in this work's case the prediction estimate and the reference value.
+Due to its simpler formulation, the mean bias not only gives the same weight to all errors, but it also shows the different signs of possible biases.
+
+\subsection{Timeseries R-Correlation}
+
+The Pearson Anomaly Correlation Coefficient (ACC), or r-correlation, measures the consistency in temporal variations for two variables as
+
+\begin{align}
+    ACC = \frac{\sum_{i=1}^{n} (y_i - \bar{y}) \cdot (\tilde{y}_i - \bar{\tilde{y}})}{\sqrt{\sum_{i=1}^{n} (y_i - \bar{y})^2} \cdot \sqrt{\sum_{i=1}^{n} (\tilde{y}_i - \hat{\tilde{y}})^2}} . \label{acc}
+\end{align}
+
+In addition to the previously used variables, $\bar{y}$ denotes the time mean of the reference and predicted value respectively.
+Due to the subtraction of the time mean from both variables, the ACC only measures the agreement of anomaly variations while disregarding the mean bias.
+As visible from equation \ref{acc}, the ACC can be interpreted as perfect agreement for a value range of $-1 \leq ACC \leq 1$.
+In this range 1 denotes perfect agreement between the anomalies of both variables, while 0 means no measurable variability agreement at all and -1 can be interpreted as perfect anticorrelation between both variables.
+In this work, the ACC will not be calculated by hand, but instead the $scipy.stats.pearsonr$ function is utilized, which uses the formulation in equation \ref{acc} \parencite{virtanen_scipy_2020}.
+
+
+\subsection{Brier Skill Score}
+
+The Brier Skill Score (BSS) compares the probabilistic forecast skill of a defined number of events between two separate predictions.
+For each prediction the Brier Score (BS) can be defined as
+
+\begin{align}
+    BS = \frac{1}{n} \cdot \sum_{i=1}^{n} (f_i - o_i)^2 , \label{bs}
+\end{align}
+
+where $f_i$ denotes the forecast probability, $o_i$ the observered or reference outcome for $n$ number of observed events.
+For an ensemble of predictions, the forecast probability can simply be defined as the mean of the event forecast for all members, with 1 being a predicted event and 0 no event.
+As the $BS$ describes a comparison of event probabilities, it can capture both the calibration of probabilities and a model's separation of events from non-events.
+Thus, on the one hand the BSS includes the ensemble probabilities in its measurement of forecast probabilities and on the other hand does not favor an over or underprediction of all events compared to a simple hitrate.
+A new forecast can then be compared to a baseline forecast using
+
+\begin{align}
+    BSS = 1 - \frac{BS_{forecast}}{BS_{baseline}} . \label{bss}
+\end{align}
+
+Consequently, a $BSS > 0$ can be interpreted as an improvement over the event prediction of the baseline forecast, while a $BSS > 0$ means a worse event prediction. \\
+In order to use the $BSS$ a set amount of observational events have to be defined.
+Usually drought extreme events are defined as a certain amount of consecutive days with of a drought metric lower than a percentile threshold.
+As the seasonal predictions utilized in this work only operate on monthly resolution, the consecutive day requirement cannot be taken into account.
+Instead, a drought extreme event will be defined as a monthly mean $CWB \leq 0.05 \cdot \bar{y}$, meaning a $5 \%$ threshold for the drought event definition for both reference and forecast data.
+On seasonal scales this definition retains its importance especially for agricultural use cases.
+
 
 
 
