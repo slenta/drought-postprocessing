@@ -15,15 +15,18 @@ Now this chapter brings the methodological concepts from section \ref{methods} t
 
 At first, all data is preprocessed according to the steps described in section \ref{preprocessing} in order to gain a $CWB$ dataset for both reference and hindcast data.
 Then, the preprocessed hindcast data is quantile mapped to fit the reference data's distribution.
-Afterwards, a mixed effect ensemble tree method uses the quantile mapped hindcasts as training predictors in order to predict its residuals to the reference data $CWB$ as a target variable.
-This mixed effect model utilizes an XGBoost base with a BLUP estimation of the grouped random effects.
-In addition to the quantile map hindcasts, the XGBoost base model is given several other predictors, including reference climatology, reference data in the three months before the hindcast start, regional information (latitudes and longitudes of each grid cell) and reference variability of the climatological period.
-The impact of each predictor will be analysed and the choice of predictors will be accordingly adjusted in order to gain the best possible prediction.
-Then, the choice of clustering will be analysed with the most important clustering choices being the grouping by quantiles of the most important predictors, by grid cell or by region both physically and in the predictor feature space.
-The analysis will also include a short comparison to simpler ML models, like basic Random Forest predictors and XGBoost models without a mixed effect implementation.
+Afterwards, several different ML methods are chosen to utilize the quantile mapped hindcasts as training predictors in order to predict its residuals to the reference data $CWB$ as a target variable.
+The ML models chosen are one random forest ensemble, one XGBoost basemodel, which will finally be extended with a mixed effect approach into a mixed effect gradient boosting architecture.
+In addition to the quantile mapped hindcasts, the ML models are given several other predictors, including reference climatology, reference data in the three months before the hindcast start, regional information (latitudes and longitudes of each grid cell) and reference variability of the climatological period.
+In addition to the choice of predictors, the choice of clustering will also be analysed for the mixed effect model.
+The most important clustering choices include the grouping by quantiles of the most important predictors, by grid cell or by region both physically and in the predictor feature space.
 For each year only one hindcast is extracted in order for the network to be able to learn leadmonth and calendar month specific dynamics in the quantile mapped residuals.
-Each hindcast covers the 6 month time period from June to November, which corresponds to the dry season of especially southern and south-eastern Africa.
-Of the 42 available years from 1983 to 2025, 4 years will be laid aside from the training procedure for both validation and testing.
+Each hindcast covers the six month time period from June to November, which corresponds to the dry season of especially southern and south-eastern Africa.
+The ML models will be tasked with postprocessing each of the available 25 hindcast members individually, before then an ensemble mean is calculated for further evaluation.
+With a separate model for each leadmonth, this leaves only 42 separate samples for the training data.
+Thus, a leave-one-out approach is employed, in which a separate model is trained for each evaluation year.
+That year is then left out from the training data.
+After evaluating each model on the left out year, all left out years are concatenated into one continuous timeline over the whole 42 year period, avoiding information leakage into the evaluation process.
 Finally, all postprocessing models will be evaluated according to their effect both on deterministic metrics such as RMSE or MAE and in regard to their probabilistic prediction of extreme events.
 Afterwards, the results of this analysis will be discussed in section \ref{discussion}.
 
@@ -50,16 +53,14 @@ This value has to be fixed at the beginning of the QM step in order to sort the 
 In this consideration, a larger amount of quantiles generally leads to a closer fitting of the distributions, while it also comes hand in hand with higher computational costs.
 There is a limit to the accuracy of quantile mapping, which is approached exponentially.
 So in order to get an amount of quantiles that stays computationally efficient while retaining close to maximal accuracy a number of different values for the amount of quantiles $n_q$ has to be tested. \\
-To evaluate the quality of the utilized QM step, both deterministic and probabilistic metrics are chosen in order to analyse the effect of the QM step on the overall as well as the extreme event prediction.
-The following results are only shown for the first leadmonth.
-Otherwise, the QM results and difference to the original hindcast might be masked by differences in the seasonality.
-
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{./plots/timeline_qm_nq_compare_lm1.png}
     \caption[Timeseries comparison of quantile mapping implementations]{\textbf{Timeseries comparison of quantile mapping implementations.} Quantile mapped hindcast ensemble means $CWB$ with min/max spread compared to the original GCFS hindcast and reference $CWB$ for the first leadmonth. The differeeThe original hindcast timeseries is displayed as dotted line, while the reference $CWB$ is shown in black. }\label{figure_qm_ts}
 \end{figure}
-
+To evaluate the quality of the utilized QM step, both deterministic and probabilistic metrics are chosen in order to analyse the effect of the QM step on the overall as well as the extreme event prediction.
+The following results are only shown for the first leadmonth.
+Otherwise, the QM results and difference to the original hindcast might be masked by differences in the seasonality.
 In addition to the general wet bias of the GCFS hindcasts, Figure \ref{figure_qm_ts} illustrates two very important results.
 On the one hand, it is visible that the QM procedure significantly reduces the mean bias in the original hindcast's estimate.
 Although it does not correct for temporal trends in interannual variability, it completely erases the mean bias over the entire 40 year period.
@@ -68,7 +69,7 @@ Just by visual inspection the timeseries become indistinguishable at $n_{quantil
 Further inspection still shows a minimal reduction in root mean squared error (RMSE) for all leadmonths up to a value of $n_{quantiles} = 20$.
 Therefore, $n_{quantiles} = 20$ is chosen in order to provide the best possible input to the ML postprocessing step, while reducing the computational costs as much as possible.
 The remaining evaluation metrics are consequently only shown for this one QM implementation that is later also used for the ML postprocessing step.\\
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.6\textwidth]{./plots/ensemble_mean_qm_distribution_n20.png}
     \caption[$CWB$ distribution effect of quantile mapping procedure]{\textbf{$CWB$ distribution effect of quantile mapping procedure.} Quantile mapped hindcast ensemble mean $CWB$ distribution (red) compared to the original GCFS hindcast (blue) and reference $CWB$ (green) for all leadmonths combined.}\label{figure_qm_dist}
@@ -79,10 +80,15 @@ For example, the far lower tail is increased, while the shape of the lower half 
 This is especially visible at the local maximum around a $CWB = -250$.
 However, it also shows the limits of the QM procedure, which cannot perfectly match the distributions towards the reference data even at very high amounts of quantiles.
 Because even though the shape of the distributions are much more similar after the QM step, differences in the amplitude of the local maxima and minima remain very clear. \\
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{./plots/figure_rmse/figure_rmse.pdf}
     \caption[$CWB$ quantile mapping RMSE change]{\textbf{$CWB$ quantile mapping RMSE change.} Quantile mapped hindcast ensemble mean $CWB$ RMSE (middle, mean 33.5) compared to the original GCFS hindcast RMSE (left, mean 50.8) for all leadmonths combined. The right panel shows the difference between both (baseline - quantile mapping).}\label{figure_qm_rmse}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{./plots/figure_meanbias/figure_meanbias.png}
+    \caption[$CWB$ quantile mapping mean bias change]{\textbf{$CWB$ quantile mapping mean bias change.} Quantile mapped hindcast ensemble mean $CWB$ mean bias (right, mean 0.4) compared to the original GCFS hindcast mean bias (left, mean 8.5) for all leadmonths combined.}\label{figure_qm_bias}
 \end{figure}
 Both the distribution and the timeseries do not show any information on the spatial distribution of the improvements.
 Figure \ref{figure_qm_rmse} addresses this shortcoming and highlights that the QM step reduces the hindcast errors in form of the RMSE (equation \ref{rmse}) also spatially at nearly every grid point.
@@ -91,21 +97,123 @@ Notably, the RMSE is significantly higher in the tropical regions compared to th
 Thisrelationship is even exacerbated in the QM hindcast as the improvement in the central African tropics is lower than in the Saharan and southern African regions.
 The Difference panel on the right of Figure \ref{figure_qm_rmse} underlines this finding.
 It also shows that there are some smaller regions, in which the baseline hindcast seems to have locally high RMSEs, which the quantile mapping procedure seems to improve reasonably well, especially in the eastern tropics. \\
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=\textwidth]{./plots/figure_meanbias/figure_meanbias.pdf}
-    \caption[$CWB$ quantile mapping mean bias change]{\textbf{$CWB$ quantile mapping mean bias change.} Quantile mapped hindcast ensemble mean $CWB$ mean bias (right, mean 0.4) compared to the original GCFS hindcast mean bias (left, mean 8.5) for all leadmonths combined.}\label{figure_qm_bias}
-\end{figure}
 Figure \ref{figure_qm_bias}, which compares the original hindcasts mean bias to that of the QM hindcast, underlines the same message.
 However, since the quantile mapping is directly designed to reduce the overall bias at each gridpoint individually, the QM hindcast shows close to no mean bias over the whole study area.
 The mean bias also illustrates that the original hindcast clearly possesses regional sign specific biases.
 As discussed in section \ref{gcfs}, the GCFS forecasts tend to overestimate the $CWB$ in the southern half of the African continent, while the northern half, including the tropics and Saharan region are estimated to be too dry. \\
 In general, the results presented in this chapter show that the QM procedure in general can significantly reduce the error and especially the time-independent biases of the original GCFS hindcasts at all grid points.
-However, it does not change the time dependent errors and retains also some of the spatial error patterns of the original GCFS hindcasts.
+However, it does not change the original hindcast's time dependent errors and also retains some of its spatial error patterns.
 
 
 \section{Results of the ML postprocessing step}\label{results_ml}
 
+In the following section, both an XGBoost and random forest base model will be extended with a mixed effect approach and tested for their performance in the postprocessing of the leftover residuals from the QM step.
 
+\subsection{Gradient Boosting Postprocessing Results}
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{./plots/train_statistics_xgb_1983/rf-basic_lm1_train_val_curve.png}
+    \caption[Training and Validation error for the XGBoost basemodel. ]{\textbf{Training and Validation error for the XGBoost basemodel.} Training (orange) and validation (blue) loss curves. The loss is calculated as RMSE over the entire spatial extent for leadmonth 1 of the model trained with the year 1983 left out. \label{figure_xgb_train}}
+\end{figure}
+After some initial hyperparameter tuning, the XGBoost model chosen for training and evaluation possesses the following hyperparameters.
+The learning rate is set to 0.05, the maximum depth of the decision trees is set to 5 and the overall number of estimators is set to 500.
+For the training and evaluation a leave one out (LOO) procedure is adapted.
+In this approach, the training set is varied in such a way that each year in the overall data period from 1983 - 2025 is left out once from the training dataset.
+As additionally one model is trained for each leadmonth separately, overall $6 \cdot 42 = 252$ models are trained.
+Afterwards, all evaluation years are merged for one continuous evaluation timeseries from 1983 - 2025.
+All evaluation metrics shown in this section are calculated over this merged evaluation timeseries. \\
+Figure \ref{figure_xgb_train} shows the asymptotical convergence towards a stable validation loss after approximately 400 boosting rounds.
+While the training error is still decreasing slightly, the validation error seems to remain steady afterwards at an RMSE of around 23.5.
+This validation error plateau indicates overfitting from that point onwards.
+Since this behaviour is constant over all validation years, the training is stopped at 500 boosting rounds for all models. \\
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/train_statistics_xgb_1983/rf-basic_lm1_feature_importance_table.png}
+    \caption[Feature Importance for the XGBoost basemodel.]{\textbf{Feature Importance for the XGBoost basemodel.} The left side indicates the name of the feature and the right sides shows its relative importance to the validation process.\label{figure_xgb_fi}}
+\end{figure}
+Before the results are further examined, one can analyse the effect of the individual predictors on the ML output.
+Figure \ref{figure_xgb_fi} depicts the relative importances of the individual predictor features to the final validation result.
+Again the model trained for leadmonth 1 and with the first year left out is chosen as an example.
+The table shows that the reference climatology ($cwb_clim_clim_month$) as well as the QM hindcast $CWB$ ($predictor$) are by far the most important features for the XGBoost model.
+All other predictors contribute considerably less to the model output and can probably be considered neglible compared to the QM hindcast and climatological input.
+A full list of the individual features can be found in section \ref{setup}. \\
+
+The timeseries in figure \ref{figure_xgb_ts} shows a comparison of the $CWB$ estimate of the original GCFS hindcast (blue), the QM estimate (green), the XGBoost estimate (orange) and the reference data (black, no ensemble spread) for the first leadmonth.
+A combined anomaly timeseries for all leadmonths can be found in the appendix in figure \ref{figure_xgb_ts_full}.
+The spread between the mininimum and maximum value of all ensemble members is indicated in the lighter shades.
+From this timeseries comparison, three results can be extracted.
+First, the XGBoost estimate remains in the same value ranges as the QM estimate, retaining its lack of a mean bias, especially compared to the original GFCS hindcast.
+Secondly, the correlation to the reference timeseries is not significantly increased through the XGBoost postprocessing step.
+This does not change for other leadmonths except in leadmonth 6, where a significant correlation increase (0.37 to 0.53) is visible.
+Finally, the ensemble spread of the XGBoost estimate is significantly reduced indicating that the ML postprocessing converges quickly towards a narrow solution while underestimating the predictive uncertainty.
+This spread reduction can be found in all XGBoost results independent of leadmonth and training dataset.
+The GCFS hindcast's ensemble uncertainty can be preserved by reconstructing only the ensemble mean and then artificially keeping a spread around it.
+However, a reconstruction of the ensemble mean only yields worse deterministic skill metrics (correlation, RMSE).
+Thus, the approach of postprocessing all members individually is pursued further.\\
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{./plots/merf-xgboost-results/lm1/ensemble_timeseries.png}
+    \caption[Timeseries analysis of the XGBoost postprocessing result]{\textbf{Timeseries analysis of the XGBoost postprocessing result.} Ensemble mean $CWB$ and min/max spread are depicted for the original GCFS hindcast (blue), the QM estimate (green), the ML postprocessing estimate (orange) and the reference data (black, no spread).\label{figure_xgb_ts}}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/figure_rmse_xgb/figure_rmse.pdf}
+    \caption[XGBoost $CWB$ RMSE comparison]{\textbf{XGBoost $CWB$ RMSE comparison.} Mean ensemble $CWB$ RMSE comparison for the original GCFS hindcast (left), the QM estimate (middle) and the XGBoost postprocessing result (right) for all leadmonths combined. The RMSE is calculated in regard to the reference data $CWB$ (section \ref{tamsat}).}\label{figure_xgb_rmse}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/figure_correlation_xgb/figure_corr.png}
+    \caption[XGBoost $CWB$ ACC comparison]{\textbf{XGBoost $CWB$ ACC comparison.} Mean ensemble $CWB$ ACC comparison for the original GCFS hindcast (left), the QM estimate (middle) and the XGBoost postprocessing result (right) for all leadmonths combined. The correlation is calculated in regard to the reference data $CWB$ (section \ref{tamsat}). Significant correlation is indicated by stipling.}\label{figure_xgb_corr}
+\end{figure}
+Overall, the timeseries does not indicate a significant increase in prediction skill throught the XGBoost postprocessing step.
+The comparison of the XGBoost $CWB$ gridcell wise skill metrics to the QM and original GCFS estimate shows a different picture.
+In both the gridcell wise RMSE (figure \ref{figure_xgb_rmse}) and anomaly correlation (figure \ref{figure_xgb_corr}) a significant increase in prediction skill is visible.
+In order to remove the seasonal cycle signal to the correlation, monthly anomalies are taken before the calculation of the ACC.
+Even compared to the already improved QM estimate, the XGBoost postprocessing step still yields a mean RMSE reduction of $9.07 \ (27\%)$ and an ACC increase of $0.08$.
+While the RMSE reduction is spatially mostly concentrated on the tropic and subtropic regions, the ACC increase also extends to the whole southern half of the African continent.
+More importantly, figure \ref{figure_xgb_corr} shows that, in addition to the absolute correlation increase, the XGBoost postprocessing actually adds significance to the correlation in large parts of the subsaharan regions.
+This is especially meaningfull, because both the original GCFS and the QM estimate possess no significant prediction skill outside the Sahara. \\
+This increase in predictive skill however can only be applied to the mean prediction.
+It has very little ascertive quality in regard to the change in predictive skill of extreme events.
+In order to further analyse the effect of the XGBoost postprocessing step on extreme event prediction, the BSS (see equation \ref{bss}) is calculated.
+For the calculation, all monthly $CWB$ values below a $10 \%$ are classified as extreme drought events.
+The BSS then compares the predictive accuracy of these extreme events between two predictions in regard to a reference dataset.
+Figure \ref{figure_xgb_bss} depicts the BSS for drought extreme events, comparing the original GCFS hindcast, the QM estimate and the XGBoost estimate with each other.
+With a mean BSS of 0.213, the XGBoost estimate predicts extreme droughts below a $10 \%$ threshold in nearly all regions better than the original GCFS hindcasts.
+However, the XGBoost estimates predict extreme droughts significantly worse compared to the QM estimate (mean BSS of -0.261).
+This result is regionally consistent over the whole study area.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/figure_bss_xgb/figure_bss.pdf}
+    \caption[BSS for XGB, QM and GCFS estimates]{\textbf{BSS for XGB, QM and GCFS estimates.} Ensemble mean BSS for extreme droughts ($< 10\%$ of monthly climatology) comparison for the QM estimate and the original GCFS hindcast (left), the XGBoost estimate and the original GCFS hindcast (middle) and the XGBoost estimate and the QM estimate (right) for all leadmonths combined. The BSS is calculated in regard to the reference data $CWB$ (section \ref{tamsat}).}\label{figure_xgb_bss}
+\end{figure}
+
+\subsection{Random Forest Postprocessing Results}
+
+The Random Forest model chosen after some hyperparamter tuning possesses the following hyperparameters.
+Consistently with the XGBoost model, the amount of estimators is set to 500, while the minimum samples per leaf are set to one and the maximum depth to 20.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{./plots/rf/rf-basic_lm1_train_val_curve.png}
+    \caption[Training and Validation error for the RF basemodel. ]{\textbf{Training and Validation error for the RF basemodel.} Training (orange) and validation (blue) loss curves. The loss is calculated as RMSE over the entire spatial extent for leadmonth 1 of the model trained with the year 1983 left out. \label{figure_rf_train}}
+\end{figure}
+Figure \ref{figure_rf_train} shows that the RF model converges much quicker to a stable solution compared to the XGBoost model (figure \ref{figure_xgb_train}).
+While the training RMSE stays much lower than for the XGBoost model, the validation error seems to steady at a very similar value of around 24.
+This speaks for the lower complexity of the RF model, while it also suggests some overfitting to the training data. \\
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/rf/rf-basic_lm1_feature_importance_table.png}
+    \caption[Feature Importance for the RF basemodel.]{\textbf{ Feature Importance for the RF basemodel.} The left side indicates the name of the feature and the right sides shows its relative importance to the validation process.\label{figure_rf_fi}}
+\end{figure}
+Furthermore, the feature importance is similar to the XGBoost model.
+In both implementations, the reference climatology and the QM hindcast as primary predictor are most important to the model performance.
+However, to the RF model the QM hindcast is clearly the most important predictor with a $31 \%$ importance while all 13 other predictors besides the reference climatology ($11 \%$) have neglibly small feature importances. \\
+
+
+
+
+\subsection{Mixed Effect Gradient Boosting Postprocessing Results}
 
 \end{document}

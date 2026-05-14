@@ -1,0 +1,19 @@
+% !TeX root = ../ba-lentz.tex
+
+\documentclass[ba-lentz.tex]{subfile}
+
+\begin{document}
+
+{\let\clearpage\relax \chapter{Appendix}}\label{appendix}
+
+\section{Further Postprocessing Results}
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/merf-xgboost-results/lm_all/ensemble_timeseries.png}
+    \caption[Anomaly timeseries analysis of the XGBoost postprocessing result over all leadmonths]{\textbf{Anomaly timeseries analysis of the XGBoost postprocessing result over all leadmonths.} Ensemble mean anomaly $CWB$ and min/max spread are depicted for the original GCFS hindcast (blue), the QM estimate (green), the XGBoost postprocessing estimate (orange) and the reference data (black, no spread).\label{figure_xgb_ts_full}}
+\end{figure}
+
+
+\end{document}
