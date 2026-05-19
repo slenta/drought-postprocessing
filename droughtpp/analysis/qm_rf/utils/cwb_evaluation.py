@@ -2,13 +2,18 @@ import numpy as np
 import xarray as xr
 from pathlib import Path
 import matplotlib.pyplot as plt
+from IPython import embed
+from scipy.stats import pearsonr
 
 from droughtpp.analysis.qm_rf.utils.visualization import (
     plot_drought_hit_rate_maps,
     plot_event_bss_comparison_maps,
     plot_example_time_means,
     plot_extreme_drought_hit_histogram,
+    plot_mae_skill_metrics,
     plot_residual_comparison_maps,
+    plot_mean_ensemble_std_maps,
+    _mean_ensemble_std_map,
 )
 from droughtpp.analysis.qm_rf.utils.evaluation import (
     brier_skill_score_between_ensembles_threshold,
@@ -54,6 +59,68 @@ def _plot_accumulated_event_timeseries(
     return str(out_png)
 
 
+def _gridwise_correlation(ensemble_np, reference_np):
+    n_time, n_members, n_lat, n_lon = ensemble_np.shape
+    correlation = np.full((n_members, n_lat * n_lon), np.nan, dtype=float)
+    reference_flat = reference_np.reshape(n_time, -1)
+
+    for member_idx in range(n_members):
+        member_flat = ensemble_np[:, member_idx].reshape(n_time, -1)
+        for cell_idx in range(n_lat * n_lon):
+            member_values = member_flat[:, cell_idx]
+            reference_values = reference_flat[:, cell_idx]
+            valid = np.isfinite(member_values) & np.isfinite(reference_values)
+            if np.count_nonzero(valid) > 1:
+                member_valid = member_values[valid]
+                reference_valid = reference_values[valid]
+                if np.nanstd(member_valid) > 0 and np.nanstd(reference_valid) > 0:
+                    correlation[member_idx, cell_idx] = np.corrcoef(
+                        member_valid,
+                        reference_valid,
+                    )[0, 1]
+
+    return correlation.reshape(n_members, n_lat, n_lon)
+
+
+def _gridwise_correlation_with_pvalues(ensemble_np, reference_np):
+    n_time, n_members, n_lat, n_lon = ensemble_np.shape
+    correlation = np.full((n_members, n_lat * n_lon), np.nan, dtype=float)
+    pvalues = np.full((n_members, n_lat * n_lon), np.nan, dtype=float)
+    reference_flat = reference_np.reshape(n_time, -1)
+
+    for member_idx in range(n_members):
+        member_flat = ensemble_np[:, member_idx].reshape(n_time, -1)
+        for cell_idx in range(n_lat * n_lon):
+            member_values = member_flat[:, cell_idx]
+            reference_values = reference_flat[:, cell_idx]
+            valid = np.isfinite(member_values) & np.isfinite(reference_values)
+            if np.count_nonzero(valid) > 1:
+                member_valid = member_values[valid]
+                reference_valid = reference_values[valid]
+                if np.nanstd(member_valid) > 0 and np.nanstd(reference_valid) > 0:
+                    r_value, p_value = pearsonr(member_valid, reference_valid)
+                    correlation[member_idx, cell_idx] = r_value
+                    pvalues[member_idx, cell_idx] = p_value
+
+    return correlation.reshape(n_members, n_lat, n_lon), pvalues.reshape(n_members, n_lat, n_lon)
+
+
+def _monthly_anomalies(data_array: xr.DataArray) -> xr.DataArray:
+    monthly_climatology = data_array.groupby("time.month").mean("time")
+    return data_array.groupby("time.month") - monthly_climatology
+
+
+def _std_over_rmse_maps(std_map: xr.DataArray, rmse_member: np.ndarray) -> np.ndarray:
+    std_values = np.asarray(std_map.values, dtype=float)
+    ratio_members = []
+    for member_rmse in np.asarray(rmse_member, dtype=float):
+        ratio = np.full_like(member_rmse, np.nan, dtype=float)
+        valid = np.isfinite(member_rmse) & (member_rmse != 0)
+        ratio[valid] = std_values[valid] / member_rmse[valid]
+        ratio_members.append(ratio)
+    return np.stack(ratio_members, axis=0)
+
+
 def evaluate_cwb(
     corrected_cwb_json: Path | None,
     hindcasts_json: Path,
@@ -63,6 +130,7 @@ def evaluate_cwb(
     eval_years=None,
     std_multiplier: float = 1.0,
     plot_dir: Path | str | None = None,
+    compute_monthly_anomalies: bool = False,
     qm_hindcasts_json: Path | None = None,
     qm_residuals_json: Path | None = None,
     ml_residuals_json: Path | None = None,
@@ -71,6 +139,8 @@ def evaluate_cwb(
     event_percentile: float = 90.0,
     probability_threshold: float = 0.5,
     ml_event_var: str = "event_probability",
+    stipple_significant_correlation: bool = True,
+    correlation_significance_level: float = 0.05,
 ):
 
     if ml_event_probability_json is not None:
@@ -92,8 +162,6 @@ def evaluate_cwb(
     if eval_years is None:
         eval_years = []
 
-    if corrected_cwb_json is None:
-        raise ValueError("corrected_cwb_json is required for residual CWB evaluation")
 
     corrected_cwb_paths = load_paths_from_json(corrected_cwb_json)
     hindcast_paths = load_paths_from_json(hindcasts_json)
@@ -108,12 +176,11 @@ def evaluate_cwb(
     )
 
     sample_corrected_cwb = load_eval_data(corrected_cwb_paths[0], cwb_var)
-    eval_month = int(sample_corrected_cwb["time"].dt.month.values[0])
+    eval_months = np.unique(sample_corrected_cwb["time"].dt.month.values)
 
-    reference_cwb_all = load_eval_data(Path(reference_data), cwb_var)
-    reference_cwb_all = reference_cwb_all.isel(
-        time=reference_cwb_all["time"].dt.month == eval_month
-    )
+    reference_cwb_all = load_eval_data(Path(reference_data), cwb_var).squeeze(dim="member")
+    mask = np.isin(reference_cwb_all["time"].dt.month.values, eval_months)
+    reference_cwb_all = reference_cwb_all.isel(time=mask)
     reference_cwb = select_eval_years(reference_cwb_all, eval_years)
 
     corrected_members = []
@@ -190,6 +257,10 @@ def evaluate_cwb(
     baseline_np = skill["secondary_np"]
     reference_np = skill["reference_np"]
 
+    # Extract lat/lon coordinates for spatial plots
+    latitude = reference.latitude.values if "latitude" in reference.coords else None
+    longitude = reference.longitude.values if "longitude" in reference.coords else None
+
     qm_ensemble = skill.get("qm_ensemble")
     qm_np = skill.get("qm_np")
 
@@ -205,6 +276,50 @@ def evaluate_cwb(
         qm_residual_np = qm_residual_ensemble.sel(time=common_time).values
         ml_residual_np = ml_residual_ensemble.sel(time=common_time).values
 
+    correlation_secondary_source = _monthly_anomalies(skill["secondary_ensemble"])
+    correlation_primary_source = _monthly_anomalies(skill["primary_ensemble"])
+    correlation_reference_source = _monthly_anomalies(skill["reference"])
+    correlation_qm_source = (
+        _monthly_anomalies(skill["qm_ensemble"]) if qm_ensemble is not None else None
+    )
+
+    correlation_secondary_np = correlation_secondary_source.values
+    correlation_primary_np = correlation_primary_source.values
+    correlation_reference_np = correlation_reference_source.values
+    correlation_qm_np = correlation_qm_source.values if correlation_qm_source is not None else None
+
+    correlation_secondary_member = _gridwise_correlation(
+        correlation_secondary_np,
+        correlation_reference_np,
+    )
+    correlation_primary_member = _gridwise_correlation(
+        correlation_primary_np,
+        correlation_reference_np,
+    )
+    correlation_qm_member = (
+        _gridwise_correlation(correlation_qm_np, correlation_reference_np)
+        if correlation_qm_np is not None
+        else None
+    )
+
+    correlation_secondary_pvalues = None
+    correlation_primary_pvalues = None
+    correlation_qm_pvalues = None
+    if stipple_significant_correlation:
+        correlation_secondary_member, correlation_secondary_pvalues = _gridwise_correlation_with_pvalues(
+            correlation_secondary_np,
+            correlation_reference_np,
+        )
+        correlation_primary_member, correlation_primary_pvalues = _gridwise_correlation_with_pvalues(
+            correlation_primary_np,
+            correlation_reference_np,
+        )
+        if correlation_qm_np is not None:
+            correlation_qm_member, correlation_qm_pvalues = _gridwise_correlation_with_pvalues(
+                correlation_qm_np,
+                correlation_reference_np,
+            )
+
     if plot_dir is not None:
         plot_dir = Path(plot_dir)
         plot_pairwise_skill_evaluation(
@@ -216,7 +331,63 @@ def evaluate_cwb(
             include_example_time_means=True,
             include_difference_examples=False,
             land_mask_path=land_mask_path,
+            include_anomalies=compute_monthly_anomalies,
+            latitude=latitude,
+            longitude=longitude,
         )
+        plot_mae_skill_metrics(
+            correlation_secondary_member,
+            correlation_primary_member,
+            correlation_qm_member,
+            out_dir=str(plot_dir),
+            n_members_display=3,
+            metric_name="Correlation",
+            file_prefix="correlation",
+            land_mask_path=land_mask_path,
+            stipple_significant=stipple_significant_correlation,
+            significance_level=correlation_significance_level,
+            correlation_pvalues_orig=correlation_secondary_pvalues,
+            correlation_pvalues_corrected=correlation_primary_pvalues,
+            correlation_pvalues_qm=correlation_qm_pvalues,
+            latitude=latitude,
+            longitude=longitude,
+        )
+
+        if qm_ensemble is not None:
+            plot_mean_ensemble_std_maps(
+                qm_dataarray=qm_ensemble,
+                ml_dataarray=corrected_ensemble,
+                original_dataarray=baseline_ensemble,
+                output_path=plot_dir / "mean_ensemble_std_maps.png",
+                land_mask_path=land_mask_path,
+                latitude=latitude,
+                longitude=longitude,
+            )
+
+            qm_std_over_rmse = _std_over_rmse_maps(
+                _mean_ensemble_std_map(qm_ensemble),
+                skill["rmse_qm_member"],
+            )
+            ml_std_over_rmse = _std_over_rmse_maps(
+                _mean_ensemble_std_map(corrected_ensemble),
+                skill["rmse_primary_member"],
+            )
+            original_std_over_rmse = _std_over_rmse_maps(
+                _mean_ensemble_std_map(baseline_ensemble),
+                skill["rmse_secondary_member"],
+            )
+            plot_mae_skill_metrics(
+                original_std_over_rmse,
+                ml_std_over_rmse,
+                qm_std_over_rmse,
+                out_dir=str(plot_dir),
+                n_members_display=3,
+                metric_name="Std/RMSE",
+                file_prefix="std_over_rmse",
+                land_mask_path=land_mask_path,
+                latitude=latitude,
+                longitude=longitude,
+            )
 
         threshold_lower_p10 = np.nanpercentile(reference_np, 10.0, axis=0)
 
@@ -243,6 +414,8 @@ def evaluate_cwb(
                 out_dir=str(plot_dir),
                 lower_threshold_label="P10",
                 file_prefix="drought_hit_rate_p10",
+                latitude=latitude,
+                longitude=longitude,
             )
 
         extreme_drought_counts = [
@@ -292,7 +465,18 @@ def evaluate_cwb(
                 variable_name=cwb_var,
                 file_prefix="residual_qm_vs_ml",
                 land_mask_path=land_mask_path,
+                latitude=latitude,
+                longitude=longitude,
             )
+
+    acc_summary = {
+        "original_acc": float(np.nanmean(correlation_secondary_member)),
+        "ml_acc": float(np.nanmean(correlation_primary_member)),
+        "qm_acc": float(np.nanmean(correlation_qm_member))
+        if correlation_qm_member is not None
+        else np.nan,
+    }
+    return acc_summary
 
 
 def evaluate_cwb_events(
@@ -320,12 +504,11 @@ def evaluate_cwb_events(
     )
 
     sample_ml_event = load_eval_data(ml_event_probability_paths[0], ml_event_var)
-    eval_month = int(sample_ml_event["time"].dt.month.values[0])
+    eval_months = np.unique(sample_ml_event["time"].dt.month.values)
 
-    reference_cwb_all = load_eval_data(Path(reference_data), cwb_var)
-    reference_cwb_all = reference_cwb_all.isel(
-        time=reference_cwb_all["time"].dt.month == eval_month
-    )
+    reference_cwb_all = load_eval_data(Path(reference_data), cwb_var).squeeze(dim="member")
+    mask = np.isin(reference_cwb_all["time"].dt.month.values, eval_months)
+    reference_cwb_all = reference_cwb_all.isel(time=mask)
     reference_cwb = select_eval_years(reference_cwb_all, eval_years)
 
     baseline_members = []
@@ -371,7 +554,7 @@ def evaluate_cwb_events(
     ml_event_probability_ensemble = xr.concat(ml_event_members, dim="member").transpose(
         "time", "member", "latitude", "longitude"
     )
-    reference = reference_members[0].transpose("time", "latitude", "longitude")
+    reference = reference_members[0].squeeze(dim="member").transpose("time", "latitude", "longitude")
     qm_ensemble = (
         xr.concat(qm_members, dim="member").transpose(
             "time", "member", "latitude", "longitude"

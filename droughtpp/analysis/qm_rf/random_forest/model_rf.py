@@ -7,6 +7,7 @@ from tqdm import tqdm
 from pathlib import Path
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
+from xgboost.callback import TrainingCallback
 from .knn_random_effects import LocalKNNRandomEffectsRegressor
 from .BLUP_random_effects import (
     BLUPMixedEffectsRegressor,
@@ -57,6 +58,23 @@ class MixedEffectsTreeRegressor:
         )
         df = df.sort_values("effect", key=abs, ascending=False)
         return df
+
+
+class _XGBRoundProgressCallback(TrainingCallback):
+    def __init__(self, total_rounds: int, every_n_rounds: int = 25):
+        self.total_rounds = int(max(1, total_rounds))
+        self.every_n_rounds = int(max(1, every_n_rounds))
+
+    def after_iteration(self, model, epoch, evals_log):
+        round_idx = int(epoch) + 1
+        should_print = (
+            round_idx == 1
+            or round_idx % self.every_n_rounds == 0
+            or round_idx >= self.total_rounds
+        )
+        if should_print:
+            print(f"XGBoost rounds: {round_idx}/{self.total_rounds}")
+        return False
 
 
 class RandomForestBiasCorrector:
@@ -135,7 +153,7 @@ class RandomForestBiasCorrector:
             X.values,
             y.values,
             eval_set=eval_set,
-            verbose=False,
+            verbose=2,
         )
 
         evals_result = xgb.evals_result()

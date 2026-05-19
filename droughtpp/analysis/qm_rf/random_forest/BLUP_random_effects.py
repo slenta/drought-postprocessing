@@ -296,15 +296,23 @@ class BLUPMixedEffectsRegressor:
         )
         self._n_neighbors_effective = int(n_neighbors_effective)
 
-    def predict(self, X, groups):
-        _, _, combined = self.predict_components(X, groups)
+    def predict(self, X, groups=None, neighbor_features=None):
+        _, _, combined = self.predict_components(
+            X,
+            groups=groups,
+            neighbor_features=neighbor_features,
+        )
         return combined
 
-    def predict_components(self, X, groups):
+    def predict_components(self, X, groups=None, neighbor_features=None):
         X_arr = np.asarray(X)
         fixed = np.asarray(self.base_model.predict(X_arr), dtype=float).reshape(-1)
 
         if self.mode == "group":
+            if groups is None:
+                re = np.zeros_like(fixed)
+                return fixed, re, fixed + re
+
             groups_arr = np.asarray(groups).astype(str)
             re = np.array(
                 [self.group_effects.get(g, 0.0) for g in groups_arr], dtype=float
@@ -316,7 +324,12 @@ class BLUPMixedEffectsRegressor:
                 re = np.zeros_like(fixed)
                 return fixed, re, fixed + re
 
-            query_features = np.asarray(groups, dtype=float)
+            query_source = neighbor_features if neighbor_features is not None else groups
+            if query_source is None:
+                re = np.zeros_like(fixed)
+                return fixed, re, fixed + re
+
+            query_features = np.asarray(query_source, dtype=float)
             distances, indices = self._nn.kneighbors(
                 query_features, return_distance=True
             )

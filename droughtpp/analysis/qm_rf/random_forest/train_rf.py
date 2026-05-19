@@ -8,6 +8,7 @@ import xarray as xr
 from joblib import dump
 from IPython import embed
 from sklearn.model_selection import train_test_split
+from tqdm.auto import tqdm
 
 from .model_rf import (
     RandomForestBiasCorrector,
@@ -544,17 +545,20 @@ def get_leadmonth_qm_paths(
 ) -> tuple[Path, Path]:
     if var_name is None:
         var_name = cfg["var_name"]
+    quantile_tag = f"nq{int(cfg['qm_arguments']['n_quantiles'])}"
     residuals_json = (
         Path(cfg["output_dir"])
-        / var_name
         / "paths"
+        / var_name
+        / quantile_tag
         / f"lm{leadmonth}"
         / "qm_residuals_paths.json"
     )
     qm_hindcasts_json = (
         Path(cfg["output_dir"])
-        / var_name
         / "paths"
+        / var_name
+        / quantile_tag
         / f"lm{leadmonth}"
         / "qm_hindcast_paths.json"
     )
@@ -578,7 +582,12 @@ def collect_train_sets_all_leadmonths(
     knn_parts = []
     year_parts = []
 
-    for leadmonth in leadmonths:
+    leadmonth_iter = (
+        tqdm(leadmonths, desc="RF training leadmonths", unit="lm")
+        if tqdm is not None
+        else leadmonths
+    )
+    for leadmonth in leadmonth_iter:
         residuals_json, qm_hindcasts_json = get_leadmonth_qm_paths(cfg, leadmonth)
         X_train, y_train, groups_train, knn_train, years_train = collect_train_sets(
             residuals_json,
@@ -718,6 +727,8 @@ def train_and_save_model(
 ):
     rf = RandomForestBiasCorrector()
     print(cfg["ml_arguments"]["n_estimators"], X_train.shape, y_train.shape)
+    test_years = cfg["ml_arguments"].get("split_years", {}).get("test", [])
+    target_scope = cfg["training_target"]
 
     model_type = str(cfg["ml_arguments"].get("model_type", "rf")).lower()
     is_mixed = model_type in {"mixed_rf", "mixed"}
@@ -802,11 +813,14 @@ def train_and_save_model(
     leadmonth_dir = (
         curve_dir_suffix if str(curve_dir_suffix).startswith("lm") else "all_leadmonths"
     )
+
     train_plot_dir = (
         Path(cfg["plot_dir"])
         / var_name
-        / "rf_train"
+        / target_scope
         / rf_results_tag_lm
+        / str(test_years[0])
+        / "rf_train"
         / leadmonth_dir
     )
 
@@ -875,11 +889,13 @@ def train_and_save_model(
     model_path = (
         Path(cfg["model_dir"])
         / var_name
+        / target_scope
         / rf_results_tag_lm
+        / str(test_years[0])
         / f"{cfg['model_name']}_{model_suffix}.joblib"
     )
     model_path.parent.mkdir(parents=True, exist_ok=True)
-    dump(model, model_path)
+    dump(model, model_path, compress=3)
     return model_path
 
 
@@ -893,13 +909,11 @@ def train(config_path: Path | None = None, config_overrides=None):
 
     Path(cfg["output_dir"]).mkdir(parents=True, exist_ok=True)
 
-    training_target = str(cfg.get("training_target", "residual")).lower()
-    is_event_target = training_target in {"event", "event_p90"}
     event_cfg = cfg.get("event_model", {}) or {}
     event_percentile = float(event_cfg.get("percentile", 90.0))
     training_var_name = cfg["var_name"]
     training_reference_path = Path(cfg["reference_data"])
-    path_scope_name = f"{training_var_name}/{training_target}"
+    target_scope = cfg.get("training_target")
 
     feature_builder = RFFeatureBuilder(
         training_reference_path,
@@ -908,8 +922,8 @@ def train(config_path: Path | None = None, config_overrides=None):
         cfg.get("feature_flags", {}),
     )
     leadmonths = cfg["leadmonth"]
-    mixed_group_by = cfg.get("ml_arguments", {}).get("mixed_group_by", "grid_id")
     correction_target = cfg.get("ml_arguments", {}).get("correction_target", "member")
+    mixed_group_by = cfg.get("ml_arguments", {}).get("mixed_group_by", "grid_id")
     knn_feature_columns = cfg.get("ml_arguments", {}).get("knn_feature_columns")
     quantile_group_predictor = cfg.get("ml_arguments", {}).get(
         "quantile_group_predictor"
@@ -921,11 +935,9 @@ def train(config_path: Path | None = None, config_overrides=None):
         cfg.get("ml_arguments", {}).get("train_leadmonth_specific", True)
     )
     rf_results_tag_base = str(cfg["rf_results_tag"])
-    if is_event_target:
-        rf_results_tag_base = f"{rf_results_tag_base}_eventp{int(event_percentile)}"
-
+    
     if not train_leadmonth_specific:
-        if is_event_target:
+        if target_scope == "event": 
             X_train, y_train, groups_train, knn_features_train, years_train = (
                 collect_event_train_sets_all_leadmonths(
                     cfg=cfg,
@@ -956,9 +968,6 @@ def train(config_path: Path | None = None, config_overrides=None):
                 )
             )
 
-        if len(y_train) == 0:
-            print("No training samples found across all leadmonths; skipping.")
-            return
 
         feature_count = int(X_train.shape[1])
         rf_results_tag_lm = f"{rf_results_tag_base}_nf{feature_count}"
@@ -966,7 +975,7 @@ def train(config_path: Path | None = None, config_overrides=None):
             X_train=X_train,
             y_train=y_train,
             out_dir=Path(cfg["output_dir"]),
-            var_name=path_scope_name,
+            var_name=var_name,
             ml_tag=rf_results_tag_lm,
             file_name="predictors_target_alllm.csv",
         )
@@ -976,7 +985,7 @@ def train(config_path: Path | None = None, config_overrides=None):
             y_train=y_train,
             groups_train=groups_train,
             years_train=years_train,
-            var_name=path_scope_name,
+            var_name=var_name,
             rf_results_tag_lm=rf_results_tag_lm,
             model_suffix="alllm",
             curve_dir_suffix="all_leadmonths",
@@ -988,7 +997,7 @@ def train(config_path: Path | None = None, config_overrides=None):
         return
 
     for leadmonth in leadmonths:
-        if is_event_target:
+        if target_scope == "event":
             _, qm_hindcasts_json = get_leadmonth_qm_paths(
                 cfg,
                 leadmonth,
@@ -1035,7 +1044,7 @@ def train(config_path: Path | None = None, config_overrides=None):
             X_train=X_train,
             y_train=y_train,
             out_dir=Path(cfg["output_dir"]),
-            var_name=path_scope_name,
+            var_name=training_var_name,
             ml_tag=rf_results_tag_lm,
             file_name=f"predictors_target_lm{leadmonth}.csv",
         )
@@ -1045,7 +1054,7 @@ def train(config_path: Path | None = None, config_overrides=None):
             y_train=y_train,
             groups_train=groups_train,
             years_train=years_train,
-            var_name=path_scope_name,
+            var_name=training_var_name,
             rf_results_tag_lm=rf_results_tag_lm,
             model_suffix=f"lm{leadmonth}",
             curve_dir_suffix=f"lm{leadmonth}",

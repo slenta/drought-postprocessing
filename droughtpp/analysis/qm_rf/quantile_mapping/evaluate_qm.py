@@ -11,6 +11,7 @@ from ..utils.visualization import (
     plot_example_time_means,
     plot_mae_skill_metrics,
     plot_bss_skill_metrics,
+    plot_custom_timeseries,
 )
 from ..config_loader import get_qm_rf_global_config
 from droughtpp.evaluation.evaluation import (
@@ -35,6 +36,7 @@ def run_qm_evaluation(
         overrides=config_overrides,
         default_config=default_cfg_path,
     )
+    quantile_tag = f"nq{int(cfg['qm_arguments']['n_quantiles'])}"
 
     # Load reference data once
     ref_ds = xr.open_dataset(cfg["reference_data"])
@@ -51,15 +53,17 @@ def run_qm_evaluation(
         hind_das.append(ds[cfg["var_name"]])
         ds.close()
 
-    for leadmonth in cfg["leadmonth"]:
-        qm_plot_dir = Path(cfg["plot_dir"]) / var_name / "qm" / f"lm{leadmonth}"
-        qm_plot_dir.mkdir(parents=True, exist_ok=True)
+    n_members = len(hind_das)
+    hind_subsets_by_member = [[] for _ in range(n_members)]
+    qm_subsets_by_member = [[] for _ in range(n_members)]
+    ref_subsets = []
 
-        qm_out_dir = Path(cfg["output_dir"]) / var_name / "data" / f"lm{leadmonth}"
+    for leadmonth in cfg["leadmonth"]:
         qm_json_path = (
             Path(cfg["output_dir"])
-            / var_name
             / "paths"
+            / var_name
+            / quantile_tag
             / f"lm{leadmonth}"
             / "qm_hindcast_paths.json"
         )
@@ -74,17 +78,23 @@ def run_qm_evaluation(
             qm_das.append(ds[cfg["var_name"]])
             ds.close()
 
-        # Compute common time across ref, hind, and qm
+        # Compute common time across ref, hind, and qm for this leadmonth
         common_time = ref_da["time"].values
         for da in hind_das:
             common_time = np.intersect1d(common_time, da["time"].values)
         for da in qm_das:
             common_time = np.intersect1d(common_time, da["time"].values)
 
-        # Subset all to common time
+        # Subset all to common time for this leadmonth
         ref_subset = ref_da.sel(time=common_time)
         hind_subsets = [da.sel(time=common_time) for da in hind_das]
         qm_subsets = [da.sel(time=common_time) for da in qm_das]
+
+        # Plot for this specific leadmonth
+        leadmonth_plot_dir = (
+            Path(cfg["plot_dir"]) / "qm" / var_name / quantile_tag / f"lm{leadmonth}"
+        )
+        leadmonth_plot_dir.mkdir(parents=True, exist_ok=True)
 
         dists = compute_qm_distributions(
             hind_subsets=hind_subsets,
@@ -94,7 +104,7 @@ def run_qm_evaluation(
         plot_qm_distributions(
             dists,
             cfg["var_name"],
-            out_dir=str(qm_plot_dir),
+            out_dir=str(leadmonth_plot_dir),
             n_quantiles=cfg["qm_arguments"]["n_quantiles"],
         )
 
@@ -103,9 +113,52 @@ def run_qm_evaluation(
             qm_subsets=qm_subsets,
             ref_subset=ref_subset,
             var_name=cfg["var_name"],
-            plot_dir=str(qm_plot_dir),
+            plot_dir=str(leadmonth_plot_dir),
             land_mask_path=cfg.get("land_mask_path"),
         )
+
+        # Append for global all-leadmonths evaluation
+        ref_subsets.append(ref_subset)
+        for member_idx in range(n_members):
+            hind_subsets_by_member[member_idx].append(hind_subsets[member_idx])
+            qm_subsets_by_member[member_idx].append(qm_subsets[member_idx])
+
+    # Concatenate all leadmonth subsets and run one combined evaluation
+    qm_plot_dir = (
+        Path(cfg["plot_dir"]) / "qm" / var_name / quantile_tag / "all_leadmonths"
+    )
+    qm_plot_dir.mkdir(parents=True, exist_ok=True)
+
+    ref_subset = xr.concat(ref_subsets, dim="time").sortby("time")
+    hind_subsets = [
+        xr.concat(member_subsets, dim="time").sortby("time")
+        for member_subsets in hind_subsets_by_member
+    ]
+    qm_subsets = [
+        xr.concat(member_subsets, dim="time").sortby("time")
+        for member_subsets in qm_subsets_by_member
+    ]
+
+    dists = compute_qm_distributions(
+        hind_subsets=hind_subsets,
+        qm_subsets=qm_subsets,
+        ref_subset=ref_subset,
+    )
+    plot_qm_distributions(
+        dists,
+        cfg["var_name"],
+        out_dir=str(qm_plot_dir),
+        n_quantiles=cfg["qm_arguments"]["n_quantiles"],
+    )
+
+    compute_qm_skill_metrics(
+        hind_subsets=hind_subsets,
+        qm_subsets=qm_subsets,
+        ref_subset=ref_subset,
+        var_name=cfg["var_name"],
+        plot_dir=str(qm_plot_dir),
+        land_mask_path=cfg.get("land_mask_path"),
+    )
 
     ref_ds.close()
 
@@ -191,6 +244,34 @@ def compute_qm_skill_metrics(
     original_mean_da = original_da.mean(dim="member")
     qm_mean_da = qm_da.mean(dim="member")
 
+    plot_custom_timeseries(
+        series_specs=[
+            {
+                "data": original_da,
+                "label": "Original",
+                "color": "C0",
+                "kind": "ensemble",
+            },
+            {
+                "data": qm_da,
+                "label": "QM",
+                "color": "C2",
+                "kind": "ensemble",
+            },
+            {
+                "data": reference_da,
+                "label": "Reference spatial mean",
+                "color": "k",
+                "kind": "line",
+            },
+        ],
+        out_dir=str(plot_dir),
+        variable_name=var_name,
+        file_prefix="timeseries_qm_original_reference",
+        title="QM, Original, and Reference Spatial Mean",
+        land_mask_path=land_mask_path,
+    )
+
     plot_example_time_means(
         baseline_ensemble=original_mean_da,
         qm_ensemble=qm_mean_da,
@@ -217,8 +298,8 @@ def compute_qm_skill_metrics(
 
     # Compute BSS for upper tail extremes
     bss_upper, _, _ = brier_skill_score_between_ensembles(
-        original_ensemble,
         qm_ensemble,
+        original_ensemble,
         reference,
         std_multiplier=1.0,
         extreme_type="upper",
@@ -226,8 +307,8 @@ def compute_qm_skill_metrics(
 
     # Compute BSS for lower tail extremes
     bss_lower, _, _ = brier_skill_score_between_ensembles(
-        original_ensemble,
         qm_ensemble,
+        original_ensemble,
         reference,
         std_multiplier=-1.0,
         extreme_type="lower",

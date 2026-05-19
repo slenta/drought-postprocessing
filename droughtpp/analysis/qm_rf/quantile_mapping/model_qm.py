@@ -27,6 +27,7 @@ def quantile_map_json(
         overrides=config_overrides,
         default_config=default_cfg_path,
     )
+    quantile_tag = f"nq{int(cfg['qm_arguments']['n_quantiles'])}"
 
     with open(cfg["hindcasts_json"], "r") as f:
         hind_files = json.load(f)
@@ -39,7 +40,11 @@ def quantile_map_json(
 
     for leadmonth in leadmonths:
         leadmonth_data_dir = (
-            Path(cfg["output_dir"]) / var_name / "data" / f"lm{leadmonth}"
+            Path(cfg["output_dir"])
+            / "data"
+            / var_name
+            / quantile_tag
+            / f"lm{leadmonth}"
         )
         qm_hindcast_out_dir = leadmonth_data_dir / "qm_hindcast"
         qm_residuals_out_dir = leadmonth_data_dir / "qm_residuals"
@@ -97,8 +102,9 @@ def quantile_map_json(
 
         qm_hindcast_paths_json = (
             Path(cfg["output_dir"])
-            / var_name
             / "paths"
+            / var_name
+            / quantile_tag
             / f"lm{leadmonth}"
             / "qm_hindcast_paths.json"
         )
@@ -108,8 +114,9 @@ def quantile_map_json(
 
         residuals_paths_json = (
             Path(cfg["output_dir"])
-            / var_name
             / "paths"
+            / var_name
+            / quantile_tag
             / f"lm{leadmonth}"
             / "qm_residuals_paths.json"
         )
@@ -120,8 +127,9 @@ def quantile_map_json(
     ref_ds.close()
     return str(
         Path(cfg["output_dir"])
-        / var_name
         / "paths"
+        / var_name
+        / quantile_tag
         / f"lm{leadmonths[0]}"
         / "qm_hindcast_paths.json"
     )

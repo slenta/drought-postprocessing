@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from tqdm import tqdm
+from IPython import embed
 
 from droughtpp.evaluation.evaluation import (
     brier_skill_score_between_ensembles,
@@ -122,8 +123,6 @@ def ensure_spatial_dims(data_array: xr.DataArray) -> xr.DataArray:
 
 
 def select_eval_years(data_array: xr.DataArray, eval_years) -> xr.DataArray:
-    if not eval_years:
-        return data_array
 
     years = pd.to_datetime(data_array["time"].values).year
     return data_array.isel(time=np.isin(years, eval_years))
@@ -258,9 +257,7 @@ def load_eval_data(path: Path, var_name: str) -> xr.DataArray:
     with xr.open_dataset(path) as ds:
         data_array = ds[var_name].load()
 
-    data_array = ensure_spatial_dims(data_array).squeeze()
-    if "time" not in data_array.dims:
-        raise ValueError(f"Expected time dimension in {path}")
+    data_array = ensure_spatial_dims(data_array)
 
     return data_array.dropna("time", how="all")
 
@@ -576,14 +573,7 @@ def prepare_pairwise_skill_evaluation(
         secondary_np - reference_np[:, None, :, :], axis=0
     )
 
-    result["bss_upper"], result["bss_lower"], *_ = brier_skill_score_between_ensembles(
-        primary_np,
-        secondary_np,
-        reference_np,
-        std_multiplier=std_multiplier,
-        extreme_type="upper",
-    )
-    result["bss_p90_upper"], result["bss_p10_lower"], *_ = (
+    result["bss_upper"], result["bss_lower"], *_ = (
         brier_skill_score_between_ensembles_percentile(
             primary_np,
             secondary_np,
@@ -591,6 +581,10 @@ def prepare_pairwise_skill_evaluation(
             upper_percentile=90.0,
             lower_percentile=10.0,
         )
+    )
+    result["bss_p90_upper"], result["bss_p10_lower"] = (
+        result["bss_upper"],
+        result["bss_lower"],
     )
 
     if qm_members:
@@ -605,33 +599,35 @@ def prepare_pairwise_skill_evaluation(
         result["mean_bias_qm_member"] = np.nanmean(
             qm_np - reference_np[:, None, :, :], axis=0
         )
-        result["bss_primary_vs_qm_upper"], _, _ = brier_skill_score_between_ensembles(
+        # Use percentile-based extremes (P90/P10) for event BSS comparisons
+        (
+            result["bss_primary_vs_qm_upper"],
+            result["bss_primary_vs_qm_lower"],
+            _,
+            _,
+            _,
+            _,
+        ) = brier_skill_score_between_ensembles_percentile(
             primary_np,
             qm_np,
             reference_np,
-            std_multiplier=1.0,
-            extreme_type="upper",
+            upper_percentile=90.0,
+            lower_percentile=10.0,
         )
-        result["bss_primary_vs_qm_lower"], _, _ = brier_skill_score_between_ensembles(
-            primary_np,
-            qm_np,
-            reference_np,
-            std_multiplier=-1.0,
-            extreme_type="lower",
-        )
-        result["bss_qm_vs_secondary_upper"], _, _ = brier_skill_score_between_ensembles(
-            qm_np,
-            secondary_np,
-            reference_np,
-            std_multiplier=1.0,
-            extreme_type="upper",
-        )
-        result["bss_qm_vs_secondary_lower"], _, _ = brier_skill_score_between_ensembles(
+
+        (
+            result["bss_qm_vs_secondary_upper"],
+            result["bss_qm_vs_secondary_lower"],
+            _,
+            _,
+            _,
+            _,
+        ) = brier_skill_score_between_ensembles_percentile(
             qm_np,
             secondary_np,
             reference_np,
-            std_multiplier=-1.0,
-            extreme_type="lower",
+            upper_percentile=90.0,
+            lower_percentile=10.0,
         )
 
     return result
@@ -647,6 +643,9 @@ def plot_pairwise_skill_evaluation(
     include_difference_examples=False,
     land_mask_path=None,
     include_bss_maps=True,
+    include_anomalies: bool = False,
+    latitude=None,
+    longitude=None,
 ):
 
     plot_dir = Path(plot_dir)
@@ -698,6 +697,8 @@ def plot_pairwise_skill_evaluation(
         metric_name="MAE",
         file_prefix="mae",
         land_mask_path=land_mask_path,
+        latitude=latitude,
+        longitude=longitude,
     )
 
     plot_mae_skill_metrics(
@@ -709,6 +710,8 @@ def plot_pairwise_skill_evaluation(
         metric_name="RMSE",
         file_prefix="rmse",
         land_mask_path=land_mask_path,
+        latitude=latitude,
+        longitude=longitude,
     )
 
     plot_mae_skill_metrics(
@@ -720,6 +723,8 @@ def plot_pairwise_skill_evaluation(
         metric_name="Mean Bias",
         file_prefix="mean_bias",
         land_mask_path=land_mask_path,
+        latitude=latitude,
+        longitude=longitude,
     )
 
     if include_bss_maps:
@@ -727,9 +732,11 @@ def plot_pairwise_skill_evaluation(
             skill["bss_upper"],
             skill["bss_lower"],
             out_dir=str(plot_dir),
-            upper_threshold_label="mean + 1σ",
-            lower_threshold_label="mean - 1σ",
+            upper_threshold_label="P90",
+            lower_threshold_label="P10",
             land_mask_path=land_mask_path,
+            latitude=latitude,
+            longitude=longitude,
         )
 
         plot_bss_skill_metrics(
@@ -741,6 +748,8 @@ def plot_pairwise_skill_evaluation(
             lower_threshold_label="P10",
             title_prefix="RF-corrected vs Original",
             land_mask_path=land_mask_path,
+            latitude=latitude,
+            longitude=longitude,
         )
 
         if skill.get("bss_primary_vs_qm_upper") is not None:
@@ -753,6 +762,8 @@ def plot_pairwise_skill_evaluation(
                 lower_threshold_label="mean - 1σ",
                 title_prefix="RF vs QM",
                 land_mask_path=land_mask_path,
+                latitude=latitude,
+                longitude=longitude,
             )
 
         if skill.get("bss_qm_vs_secondary_upper") is not None:
@@ -761,18 +772,22 @@ def plot_pairwise_skill_evaluation(
                 bss_ml_vs_orig=skill["bss_upper"],
                 bss_ml_vs_qm=skill["bss_primary_vs_qm_upper"],
                 out_dir=str(plot_dir),
-                threshold_label="Upper tail (mean + 1σ)",
+                threshold_label="90th percentile",
                 file_prefix="bss_comparison_upper",
                 land_mask_path=land_mask_path,
+                latitude=latitude,
+                longitude=longitude,
             )
             plot_event_bss_comparison_maps(
                 bss_qm_vs_orig=skill["bss_qm_vs_secondary_lower"],
                 bss_ml_vs_orig=skill["bss_lower"],
                 bss_ml_vs_qm=skill["bss_primary_vs_qm_lower"],
                 out_dir=str(plot_dir),
-                threshold_label="Lower tail (mean - 1σ)",
+                threshold_label="10th percentile",
                 file_prefix="bss_comparison_lower",
                 land_mask_path=land_mask_path,
+                latitude=latitude,
+                longitude=longitude,
             )
 
     if include_timeseries:
@@ -783,6 +798,8 @@ def plot_pairwise_skill_evaluation(
             out_dir=str(plot_dir),
             qm_ensemble=qm_ensemble.values if qm_ensemble is not None else None,
             land_mask_path=land_mask_path,
+            time_coords=skill.get("common_time", None),
+            compute_monthly_anomalies=include_anomalies,
         )
 
     if reference_all is not None and variable_name is not None:

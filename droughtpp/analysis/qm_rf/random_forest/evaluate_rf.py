@@ -10,6 +10,7 @@ from joblib import load
 from tqdm import tqdm
 import scipy.stats as sps
 from cmethods import adjust
+from IPython import embed
 
 from .model_rf import (
     RandomForestBiasCorrector,
@@ -327,8 +328,8 @@ def save_predicted_residuals(
                 pred_member = corrected_cwb - qm_member
 
                 p = Path(qm_fp)
-                out_path = f"{out_base}/{p.stem}{suffix}_lm{leadmonth}.nc"
-                corrected_cwb_path = cwb_base / f"{p.stem}_qm_rf_cwb_lm{leadmonth}.nc"
+                out_path = f"{out_base}/{p.stem}{suffix}.nc"
+                corrected_cwb_path = cwb_base / f"{p.stem}_qm_rf.nc"
 
                 orig_time_sel = ds_qm["time"].sel(time=pd.to_datetime(valid_times))
 
@@ -433,14 +434,14 @@ def save_predicted_residuals(
             ds_out["time"].attrs = ds_qm["time"].attrs
 
             p = Path(qm_fp)
-            out_path = f"{out_base}/{p.stem}{suffix}_lm{leadmonth}.nc"
+            out_path = f"{out_base}/{p.stem}{suffix}.nc"
             ds_out.to_netcdf(str(out_path))
             residual_paths.append(str(Path(out_path)))
 
             corrected_cwb = combine_qm_and_residuals(
                 qm_da, pred_da, var_name=var_name
             ).squeeze()
-            corrected_cwb_path = cwb_base / f"{p.stem}_qm_rf_cwb_lm{leadmonth}.nc"
+            corrected_cwb_path = cwb_base / f"{p.stem}_qm_rf.nc"
             ds_cwb = ds_qm.copy()
             ds_cwb[var_name] = corrected_cwb
             ds_cwb = ds_cwb.sel(time=pd.to_datetime(valid_times))
@@ -771,12 +772,10 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     out_dir = Path(cfg["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
     var_name = cfg["var_name"]
-    training_target = str(cfg.get("training_target", "residual")).lower()
-    is_event_target = training_target in {"event", "event_p90"}
     event_cfg = cfg.get("event_model", {}) or {}
     event_percentile = float(event_cfg.get("percentile", 90.0))
     event_probability_threshold = float(event_cfg.get("probability_threshold", 0.5))
-    target_scope = f"{var_name}/{training_target}"
+    target_scope = cfg["training_target"]
     feature_var = cfg["var_name"]
     feature_reference_path = Path(cfg["reference_data"])
     workflow = cfg["workflow"]
@@ -786,6 +785,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     val_years = split_years_cfg.get("val", [])
     eval_years = split_years_cfg.get("test", cfg.get("leave_out_years", []))
     correction_target = cfg.get("ml_arguments", {}).get("correction_target", "member")
+    
     knn_feature_columns = cfg.get("ml_arguments", {}).get("knn_feature_columns")
     quantile_group_predictor = cfg.get("ml_arguments", {}).get(
         "quantile_group_predictor"
@@ -799,7 +799,7 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
     evaluate_intensity_flag = bool(workflow.get("evaluate_intensity", False))
     evaluate_spei_flag = bool(workflow.get("evaluate_spei", False))
     rf_results_tag = str(cfg["rf_results_tag"])
-    if is_event_target:
+    if target_scope == "event":
         rf_results_tag = f"{rf_results_tag}_eventp{int(event_percentile)}"
     train_leadmonth_specific = bool(
         cfg.get("ml_arguments", {}).get("train_leadmonth_specific", True)
@@ -834,17 +834,20 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
         )
 
         if needs_rf_eval_paths:
+            quantile_tag = f"nq{int(cfg['qm_arguments']['n_quantiles'])}"
             residuals_json = (
                 Path(cfg["output_dir"])
-                / feature_var
                 / "paths"
+                / feature_var
+                / quantile_tag
                 / f"lm{leadmonth}"
                 / "qm_residuals_paths.json"
             )
             qm_hindcasts_json = (
                 Path(cfg["output_dir"])
-                / feature_var
                 / "paths"
+                / feature_var
+                / quantile_tag
                 / f"lm{leadmonth}"
                 / "qm_hindcast_paths.json"
             )
@@ -867,9 +870,10 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
         eval_plot_root = (
             Path(cfg["plot_dir"])
             / var_name
-            / training_target
-            / "rf_eval"
+            / target_scope
             / rf_results_tag_lm
+            / str(eval_years[0])
+            / "rf_eval"
             / leadmonth_label
         )
 
@@ -877,8 +881,10 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
             model_suffix = f"lm{leadmonth}" if train_leadmonth_specific else "alllm"
             model_path = (
                 Path(cfg["model_dir"])
+                / var_name
                 / target_scope
                 / rf_results_tag_lm
+                / str(eval_years[0])
                 / f"{cfg['model_name']}_{model_suffix}.joblib"
             )
             model = load(model_path)
@@ -927,53 +933,63 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
 
         month_data_dir = (
             out_dir
-            / target_scope
             / "data"
-            / "rf_eval"
+            / var_name
+            / target_scope
             / rf_results_tag_lm
+            / str(eval_years[0])
+            / "rf_eval"
             / leadmonth_label
         )
         month_data_dir.mkdir(parents=True, exist_ok=True)
 
         spei_paths_json = (
             out_dir
-            / target_scope
             / "paths"
-            / "rf_eval"
+            / var_name
+            / target_scope
             / rf_results_tag_lm
+            / str(eval_years[0])
+            / "rf_eval"
             / leadmonth_label
             / "corrected_spei_paths.json"
         )
         residual_paths_json = (
             out_dir
-            / target_scope
             / "paths"
-            / "rf_eval"
+            / var_name
+            / target_scope
             / rf_results_tag_lm
+            / str(eval_years[0])
+            / "rf_eval"
             / leadmonth_label
             / "corrected_residuals_paths.json"
         )
         corrected_cwb_paths_json = (
             out_dir
-            / target_scope
             / "paths"
-            / "rf_eval"
+            / var_name
+            / target_scope
             / rf_results_tag_lm
+            / str(eval_years[0])
+            / "rf_eval"
             / leadmonth_label
             / "corrected_cwb_paths.json"
         )
         event_probability_paths_json = (
             out_dir
-            / target_scope
             / "paths"
-            / "rf_eval"
+            / var_name
+            / target_scope
             / rf_results_tag_lm
+            / str(eval_years[0])
+            / "rf_eval"
             / leadmonth_label
             / "event_probability_paths.json"
         )
 
         if run_rf_evaluate:
-            if is_event_target:
+            if target_scope == "event":
                 save_predicted_event_probabilities(
                     model,
                     qm_hindcasts_json,
@@ -1019,28 +1035,31 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
                     val_data_dir = month_data_dir / "post_qm_val_calibration"
                     val_spei_paths_json = (
                         out_dir
-                        / target_scope
                         / "paths"
-                        / "rf_eval"
+                        / var_name
+                        / target_scope
                         / rf_results_tag_lm
+                        / "rf_eval"
                         / leadmonth_label
                         / "val_corrected_spei_paths.json"
                     )
                     val_residual_paths_json = (
                         out_dir
-                        / target_scope
                         / "paths"
-                        / "rf_eval"
+                        / var_name
+                        / target_scope
                         / rf_results_tag_lm
+                        / "rf_eval"
                         / leadmonth_label
                         / "val_corrected_residuals_paths.json"
                     )
                     val_corrected_cwb_paths_json = (
                         out_dir
-                        / target_scope
                         / "paths"
-                        / "rf_eval"
+                        / var_name
+                        / target_scope
                         / rf_results_tag_lm
+                        / "rf_eval"
                         / leadmonth_label
                         / "val_corrected_cwb_paths.json"
                     )
@@ -1088,10 +1107,10 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
             plot_dir = str(eval_plot_root / "cwb")
             evaluate_cwb(
                 corrected_cwb_json=(
-                    None if is_event_target else Path(corrected_cwb_paths_json)
+                    None if target_scope == "event" else Path(corrected_cwb_paths_json)
                 ),
                 ml_event_probability_json=(
-                    Path(event_probability_paths_json) if is_event_target else None
+                    Path(event_probability_paths_json) if target_scope == "event" else None
                 ),
                 hindcasts_json=Path(cfg["hindcasts_json"]),
                 reference_data=Path(cfg["reference_data"]),
@@ -1104,20 +1123,22 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
                 plot_dir=plot_dir,
                 qm_hindcasts_json=(
                     Path(cfg["output_dir"])
-                    / var_name
                     / "paths"
+                    / var_name
+                    / f"nq{int(cfg['qm_arguments']['n_quantiles'])}"
                     / f"lm{leadmonth}"
                     / "qm_hindcast_paths.json"
                 ),
                 qm_residuals_json=(
                     Path(cfg["output_dir"])
-                    / var_name
                     / "paths"
+                    / var_name
+                    / f"nq{int(cfg['qm_arguments']['n_quantiles'])}"
                     / f"lm{leadmonth}"
                     / "qm_residuals_paths.json"
                 ),
                 ml_residuals_json=(
-                    None if is_event_target else Path(residual_paths_json)
+                    None if target_scope == "event" else Path(residual_paths_json)
                 ),
                 land_mask_path=cfg.get("land_mask_path"),
             )
@@ -1135,8 +1156,8 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
                 plot_dir=plot_dir,
                 qm_hindcasts_json=(
                     Path(cfg["output_dir"])
-                    / var_name
                     / "paths"
+                    / var_name
                     / f"lm{leadmonth}"
                     / "qm_hindcast_paths.json"
                 ),
