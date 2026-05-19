@@ -56,7 +56,7 @@ So in order to get an amount of quantiles that stays computationally efficient w
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{./plots/timeline_qm_nq_compare_lm1.png}
-    \caption[Timeseries comparison of quantile mapping implementations]{\textbf{Timeseries comparison of quantile mapping implementations.} Quantile mapped hindcast ensemble means $CWB$ with min/max spread compared to the original GCFS hindcast and reference $CWB$ for the first leadmonth. The differeeThe original hindcast timeseries is displayed as dotted line, while the reference $CWB$ is shown in black. }\label{figure_qm_ts}
+    \caption[Timeseries comparison of quantile mapping implementations]{\textbf{Timeseries comparison of quantile mapping implementations.} Quantile mapped hindcast ensemble means $CWB$ with min/max spread compared to the original GCFS hindcast and reference $CWB$ for the first leadmonth. The original hindcast timeseries is displayed as dotted line, while the reference $CWB$ is shown in black. }\label{figure_qm_ts}
 \end{figure}
 To evaluate the quality of the utilized QM step, both deterministic and probabilistic metrics are chosen in order to analyse the effect of the QM step on the overall as well as the extreme event prediction.
 The following results are only shown for the first leadmonth.
@@ -155,7 +155,7 @@ Thus, the approach of postprocessing all members individually is pursued further
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.8\textwidth]{./plots/merf-xgboost-results/lm1/ensemble_timeseries.png}
-    \caption[Timeseries analysis of the XGBoost postprocessing result]{\textbf{Timeseries analysis of the XGBoost postprocessing result.} Ensemble mean $CWB$ and min/max spread are depicted for the original GCFS hindcast (blue), the QM estimate (green), the ML postprocessing estimate (orange) and the reference data (black, no spread).\label{figure_xgb_ts}}
+    \caption[Timeseries analysis of the XGBoost postprocessing result]{\textbf{Timeseries analysis of the XGBoost postprocessing result.} Ensemble mean $CWB$ and min/max spread are depicted for the original GCFS hindcast (blue), the QM estimate (green), the XGBoost postprocessing estimate (orange) and the reference data (black, no spread).\label{figure_xgb_ts}}
 \end{figure}
 \begin{figure}[H]
     \centering
@@ -210,10 +210,76 @@ This speaks for the lower complexity of the RF model, while it also suggests som
 Furthermore, the feature importance is similar to the XGBoost model.
 In both implementations, the reference climatology and the QM hindcast as primary predictor are most important to the model performance.
 However, to the RF model the QM hindcast is clearly the most important predictor with a $31 \%$ importance while all 13 other predictors besides the reference climatology ($11 \%$) have neglibly small feature importances. \\
-
-
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{./plots/rf/lm1_ensemble_timeseries.png}
+    \caption[Timeseries analysis of the RF postprocessing result]{\textbf{Timeseries analysis of the RF postprocessing result.} Leadmonth 1 ensemble mean $CWB$ and min/max spread are depicted for the original GCFS hindcast (blue), the QM estimate (green), the RF postprocessing estimate (orange) and the reference data (black, no spread).\label{figure_rf_ts}}
+\end{figure}
+The timeseries in figure \ref{figure_rf_ts} shows that overall the RF postprocessing yields very similar results to the XGBoost estimate.
+In parallel to the XGBoost results, the RF estimate indicates no significant change in timeseries correlation and struggles with reconstructing the original ensemble spread.
+Again, the min/max ensemble spread is in general lower than that of the original GCFS hindcast, indicating an overconfidence of the RF architecture in its own postprocessing result.
+The RMSE and correlation metrics underline the similarities between the RF and XGBoost estimates.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/rf/figure_rmse_corr_rf/figure_corr_rmse_comp.png}
+    \caption[XGBoost and RF $CWB$ ACC and RMSE comparison]{\textbf{XGBoost and RF $CWB$ ACC and RMSE comparison.} Mean ensemble $CWB$ ACC comparison for the RF estimate (top left) and the XGBoost estimate (top right). Mean ensemble $CWB$ RMSE for the RF estimate (bottom left) and the XGBoost estimate (bottom right). All metrics are calculated over all evaluation years and for all leadmonths combined. Correlation and RMSE are calculated in regard to the reference data $CWB$ (section \ref{tamsat}). Significant correlation is indicated by stipling.}\label{figure_rf_corr}
+\end{figure}
+Figure \ref{figure_rf_corr} depicts a comparison of the ACC and RMSE between the RF and XGBoost ensemble mean estimates for all leadmonths combined.
+In both cases, the XGBoost model performs marginally better compared to the RF model.
+The RF postprocessing step also manages to extend significant correlation to most of the study area including subsaharan regions.
+Under closer examination, few differences remain, mostly in the signicance of the ACC in central african and equatorial regions.
+These differences are also reflected in a lower mean ACC (0.226 vs. 0.253) and higher mean RMSE (25.9 vs 24.4) of the RF estimate.
+Seemingly insignificant, a difference of 0.03 in the mean ACC translates to double the improvement from the QM step in the XGBoost estimate.
+Thus, even though the differences are small, the relative improvement from the XGBoost to the RF estimate remains significant. \\
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/lm_ts_compare/figure_lmts-compare.pdf}
+    \caption[Leadmonth ACC Skill comparison for different hindcast estimates]{\textbf{Leadmonth ACC Skill comparison for different hindcast estimates.} Ensemble mean ACC for the GCFS, QM, RF and XGBoost estimates decomposed by leadmonth. }\label{figure_lm-acc}
+\end{figure}
+This impression is underlined when decomposing the prediction skill (in ACC) per leadmonth.
+This decomposition shows that most of the improvement from both ML methods comes in leadmonths 3 -- 6.
+And here the XGBoost estimate performs significantly better than the RF estimate with an ACC improvement of over 0.05 over the last four leadmonths.
+It also shows that the relatively high prediction quality of the GCFS and QM estimates in the first two leadmonths is rarely improved by the ML postprocessing.
+Over longer leadtimes however, the improvement of the ML methods but also the difference between them becomes ever more significant. \\
+In order to further investigate the nature of these differences, figure \ref{figure_rf_resid} depicts the ML output from both RF and XGBoost models and compares them to the QM residual target.
+The direct comparison shows that the mean differences between the RF and XGBoost estimates are very similar indeed.
+Both models learn and apply the overall residual patterns from the QM estimate.
+However, both models also overestimate the mean amplitude of these residuals showing close resemblance also in the smaller regional output patterns.
+For example, in both leadmonth 1 ML outputs the models show patches of too low $CWB$ in the equatorial regions and the very southern tip of the African continent.
+Similarly, both leamonth 6 estimates show an overestimated $CWB$ around the border switch between positive and negative QM residuals at approximately the equator.
+This overestimation is more pronounced in the RF output.
+In general, this target comparison underlines the RMSE and ACC results.
+Both ML models manage to learn and apply similar corrections to the QM estimates.
+All deterministic metrics point to a bigger improvement in the XGBoost model, although the size of that difference can not always be interpreted as significant. \\
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/rf/figure_residual_comps/figure_residual_comp.pdf}
+    \caption[XGBoost and RF $CWB$ target estimate comparison]{\textbf{XGBoost and RF $CWB$ target estimate comparison.} Mean ensemble QM target (left) compared to the ensemble mean RF output (middle) and ensemble mean XGBoost output (right) for leadmonths 1 (top) and 6 (bottom).}\label{figure_rf_resid}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{./plots/rf/figure_bss_rf/figure_bss_rf.png}
+    \caption[BSS comparison for RF and XGB estimates]{\textbf{BSS comparison for RF and XGB estimates.} Ensemble mean BSS for extreme droughts ($< 10\%$ of monthly climatology) comparison for the RF estimate and the original GCFS hindcast (left), the RF and the QM estimate (middle) and the XGBoost and the QM estimate (right) for all leadmonths combined. The BSS is calculated in regard to the reference data $CWB$ (section \ref{tamsat}).}\label{figure_rf_bss}
+\end{figure}
+Figure \ref{figure_rf_bss} shows that opposite to the deterministic skill metrics, the RF model performs better than the XGB model in the prediction of extreme droughts.
+With a mean BSS of -0.111, the RF estimate is, though still inferior, very close to the extreme event prediction of the QM estimate.
+The performance difference between the RF and the QM estimate is spatially very consistent, with nearly all regions possessing a BSS outside of an absolute value of 0.2.
 
 
 \subsection{Mixed Effect Gradient Boosting Postprocessing Results}
+
+As a final ML step, both the RF and XGBoost base models are extended by a random grouped regression to a mixed effect approach.
+In this mixed effect approach, the choice of grouping mechanism should in theory have the most impact on the model performance in addition to the hyperparameter tuning of the basemodel.
+The grouping choices considered in this work include the grouping by k-nearest-neighbours (knn) both in the actual geographical space as well as in feature space and by predictor quantile.
+However, this work did not succeed in implementing a mixed effect approach that significantly improved the model performance.
+By decomposition analysis of the prediction effect between fixed and random effect, it can be shown that the random effect part possesses only a neglible influence on the postprocessing results.
+Independent of grouping choice, the further improvement over the basemodel performance does not overcome an RMSE decrease of 0.2.
+In parallel to that, the impact of the random effect on the BSS or ACC remains negligible.
+\\
+At this point, it cannot be determined if the low impact of the mixed effect method is caused by errors in the coding or because of physical reasons.
+For example, it is possible that the group specific random effects are too low to result in any meaningful improvement in prediction skill.
+A further discussion of these reasons as well as possible follow up research will be discussed in chapter \ref{discussion}.
+
+
 
 \end{document}
