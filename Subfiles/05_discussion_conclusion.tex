@@ -9,8 +9,8 @@
 \section{Discussion}\label{discussion}
 
 The results produced in this thesis, the applied methods and the executed course of action are all based on assumptions.
-These assumptions and the neural network's limitations have to be discussed first before any final conclusions can be drawn in regard to its performance and potential.
-Additionally, it can be examined in how far these limitations are specific to this work and can be worked on in further research outside this thesis. \\
+These assumptions and the methodological limitations have to be discussed first before any final conclusions can be drawn in regard to its performance and potential.
+Additionally, it can be examined in how far these limitations are specific to this work and can be adjusted in further research outside this thesis. \\
 In general, we assume the Tamsat and ERA5 datasets to be unbiased reference dataset.
 However, they both use different infilling methods in order to account for missing observational data, especially regarding precipitation.
 Therefore, assuming the reference dataset to be an objective ground truth can lead to an overconfidence in the prediction skill, especially because the reliability in observational techniques changed in the course of the training period.
@@ -23,14 +23,14 @@ In the opposite, since climate change trends can be regionally specific, includi
     \includegraphics[width=\textwidth]{./plots/skill_scores/figure_skillscores.pdf}
     \caption[Timeseries comparison of different hindcasts prediction skill]{\textbf{Timeseries comparison of different hindcasts prediction skill.} ACC, RMSE and BSS (in comparison to the baseline GCFS hindcast) of the quantile mapped hindcast, the RF and the XGBoost postprocessing ensemble mean $CWB$ estimate. }\label{figure_skillscores}
 \end{figure}
-Regardless of these general limitations of the utilized combined QM and ML postprocessing approach, three additional limitations become visible in the results presented in section \ref{results_ml}.
-First, the comparison between the results of the QM, RF and XGBoost $CWB$ estimates indicate a tradeoff between deterministic and probabilistic extreme event prediction skill.
+Regardless of these general limitations, three additional aspects in the results presented in section \ref{results_ml} require further discussion.
+First, the comparison between the results of the QM, RF and XGBoost $CWB$ estimates indicate a tradeoff between mean and extreme event prediction skill.
 In this context, it is necessary to focus on use cases of this postprocessing method in order to determine an appropriate ML method for each application.
 Second, both ML models seem to reduce the ensemble spread of the GCFS hindcasts possibly leading to an underestimation of the prediction uncertainty.
 The reasons and effects of this reduced ensemble spread have to be discussed.
 Furthermore, the failure of the mixed effect approach to reach any significant increase in prediction skill can be discussed more extensively.
 In the course of this discussion, further possibilities to improve or extend the mixed effect approach can be analysed in order to show pathways to further research.\\
-The possibly most meaningfull result of this thesis is that the deterministic prediction skill of seasonal drought predictions can be significantly improved with a combined QM and ML approach.
+The possibly most meaningful result of this thesis is that the deterministic prediction skill of seasonal drought predictions can be significantly improved with a combined QM and ML approach.
 However, this increase in deterministic skill metrics partially comes at a tradeoff of probabilistic extreme event prediction.
 Figure \ref{figure_skillscores} shows again a comparison of the prediction skill metrics of the different hindcast estimates.
 Especially the comparison between the QM, RF and XGBoost estimates show a reversed BSS Skill compared to the ACC and RMSE metrics.
@@ -38,7 +38,7 @@ Therefore, it is not possible to determine a clear best estimate for future $CWB
 The only certainty is the significant improvement all three estimates possess over the original GCFS hindcast in all three metrics.
 Thus, the choice of postprocessing method is clearly dependent on the individual use case.
 Dependent on the application, a user might put more weight to the probabilistic prediction of individual drought extreme events, while others might be more interested in the overall prediction skill.
-There are several possibilities to improve the extreme events prediction of the ML postprocessing estimates.
+There are several possibilities to improve the extreme event prediction of the ML postprocessing estimates.
 On the one hand, they can be implicitly trained to better predict outliers by giving increased weight to the loss function of extreme events.
 On the other hand, explicit training of extreme event prediction can be performed with a second ML framework.
 To do that the same basic setup as in this thesis could be utilized by substituting the QM residuals as training targets to instead target the variable intensity above or below a certain extreme threshold.
@@ -50,7 +50,8 @@ It is unclear however, if this reduced spread is actually a reflection of lower 
 Alternatively, it could also reflect an overconfidence of the ML ensemble in its own estimate.
 That would mean that the ML methods underestimate the uncertainty of its prediction.
 To understand this relationship, the mean ensemble spread can be compared to the RMSE of the same prediction at each grid point.
-If the relationship stays the same the reduced ensemble spread also reflects the higher prediction skill, while if it significantly changes, the method might over- or underestimate its prediction uncertainty. \\
+If the relationship stays the same the reduced ensemble spread, it can be said to reflect an appropriate higher confidence due to its higher prediction skill.
+If the relationship changes however, the method might over- or underestimate its prediction uncertainty. \\
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{./plots/Figure_comparing_Std_rmse/figure_std-rmse.pdf}
@@ -60,13 +61,14 @@ If the relationship stays the same the reduced ensemble spread also reflects the
 Figure \ref{figure_std-rmse} shows this spatial comparison of the mean ensemble standard deviation divided by the gridwise RMSE over all evaluation years for the RF, QM, GCFS and XGBoost estimates.
 It shows not only that the ML estimates show a clearly reduced ensemble standard deviation.
 Especially the XGBoost (mean $=$ 0.213) estimate shows a much smaller ratio of its ensemble spread compared to its prediction error.
-This might indicate that it might underestimate its own ensemble uncertainty.
+This might indicate that it underestimates its own ensemble uncertainty.
 Parallel to that, the RF estimate (mean $=$ 0.368) also shows a smaller mean ratio, although it remains closer to the original GCFS hindcast (mean $=$ 0.442) in its mean value.
 The QM estimate on the other hand keeps the same ensemble spread, while improving the prediction skill.
 Thus, this intermediate step might actually overestimate its own uncertainty.
 Overall, this analysis indicates that the ML methods might underestimate their prediction uncertainty.
 There are possibilities to counter this effect.
-For example, only the ensemble mean could be posptrocessed with an ensemble spread similar to the original GCFS forecast ensemble could be added in afterwards.
+For example, only the ensemble mean could be postprocessed.
+In this case the ensemble differences to the mean from the original GCFS forecast ensemble could be added afterwards.
 Similarly, a spread modifier could artificially change the ML ensemble spread by enhancing differences for each member to the ensemble mean.
 Such analysis steps would however go beyond the scope of this thesis and could be examined in further works. \\
 Finally, the results of the mixed effect approach should be discussed in further detail.
@@ -98,8 +100,8 @@ Chapter \ref{discussion} discusses possible further research directions in order
 Overall, these results prove that combining statistical quantile mapping with comparatively simple ML models can significantly improve climate hindcasts in general.
 The framework implemented in this thesis can be transferred to any other climate variable or timescale.
 It has also been based on the operational seasonal climate prediction system of the DWD, making it directly appealing to users and stakeholders alike.
-In general, this thesis can only be seen as a basis into the further integration of ML methods climate forecast postprocessing.
-With further research, we can move further into the realms of hybrid ML prediction and a the integration of artificial intelligence into the climate sciences.
+In general, this thesis can only be seen as a basis for the full integration of ML methods into the world of climate prediction postprocessing.
+With further research, we can move towards full hybrid ML prediction and the subsequent integration of artificial intelligence into the climate sciences.
 
 
 

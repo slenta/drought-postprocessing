@@ -4,7 +4,7 @@
 
 \begin{document}
 
-{\let\clearpage\relax \chapter{Data and methods}}\label{data_methods}
+{\let\clearpage\relax \chapter{Data and methods}\label{data_methods}}
 
 \section{Data}\label{data}
 
@@ -18,8 +18,9 @@ with P as the total monthly precipitation and PET the potential evapotranspirati
 Due to the limitation in output variables from the DWD seasonal prediction system, a relatively simple version of the PET is used, only taking monthly mean temperature as an input value.
 For the training and evaluation of the network, three datasets are used and therefore have to be discussed.
 On the one hand, the hindcasts used for the ML training and therefore the input into the postprocessing workflow are the seasonal climate hindcasts by the German Weather Service (DWD).
-On the other hand, a mixture of 2 reanalysis datasets based on remote sensing observations have been chosen as reference data and therefore assumed ground truth.
+On the other hand, a mixture of 2 reanalysis datasets based on remote sensing observations have been chosen as reference data.
 This reference CWB is build from the TAMSAT precipitation reanalysis and the ERA5 reanalysis of near-surface air temperature.
+Due to the abundance of temperature and precipitation remote sensing data since the introduction of satellite observations, they are assumed to represent the ground truth.
 In the following section, these datasets, their strengths and limitations as well as current use cases in research will be discussed. \\
 
 \subsection{The GCFS Seasonal Forecast System}\label{gcfs}
@@ -27,11 +28,12 @@ In the following section, these datasets, their strengths and limitations as wel
 Since 2016, the DWD is operationally running the current GCFS forecast system.
 It provides seasonal forecasts up to six months ahead using a fully coupled Earth system model, including atmosphere, ocean, land, and sea ice component \parencite{frohlich_german_2021}.
 GCFS2.0 is based on the Max-Planck Insitutes high resolution earth system model (MPI-ESM-HR), with an atmospheric resolution of approximately 70 km at 50°N and an ocean resolution of approximately 0.4°, representing a major upgrade from GCFS1.0 \parencite{frohlich_german_2021}.
-Initial conditions are generated using continuous nudging assimilation toward ERA-Interim atmospheric reanalysis combined with ORAS5 ocean reanalysis, as constructed in \parencite{baehr_prediction_2015}.
+Initial conditions are generated using continuous nudging assimilation toward ERA-Interim atmospheric reanalysis combined with ORAS5 ocean reanalysis, as constructed in \cite{baehr_prediction_2015}.
 Ensemble forecasts are produced using perturbations in atmospheric parameters and ocean bred vectors, with 30 hindcast members.
 Of these 30 members, 25 are currently available for download from the copernicus data store and used for the training of the ML algorithm.
-Compared to the previous version, GCFS2.0 shows significantly improved winter forecast skill, particularly for Northern Hemisphere circulation patterns, where NAO prediction skill approximately doubled compared to GCFS1.0 \parencite{frohlich_german_2021}.
-However, weaknesses remain, including reduced skill in the tropical Pacific and Atlantic, which negatively affects ENSO prediction.
+Compared to the previous version, GCFS2.0 shows significantly improved winter forecast skill, particularly for Northern Hemisphere circulation patterns, where NAO prediction skill approximately doubled compared to GCFS1.0 \parencite{frohlich_german_2021}. \\
+The GCFS2.0 forecast system retains some important limitations.
+For example, it exhibits reduced skill in the tropical Pacific and Atlantic, which negatively affects ENSO prediction.
 In regard to the study region of this work, a cold bias over northern Africa and a warm bias over southern Africa is still apparent, even if reduced compared to GCFS1.0 \parencite{frohlich_german_2021}.
 GCFS2.0 also exhibits a persistent tropical warm bias, likely related to atmospheric parameterization changes.
 Overall, GCFS2.0 improves winter predictability and regional forecast skill, but limitations remain in tropical processes and seasonal-dependent performance \parencite{frohlich_german_2021}.
@@ -51,7 +53,7 @@ The TAMSAT TARCAT dataset addresses sparse gauge observations by using fixed cli
 This approach avoids biases introduced by changing gauge coverage over time.
 Rainfall estimates are then generated solely from satellite-derived cold cloud duration (CCD) fields, allowing spatially complete precipitation estimates even where no ground observations exist.
 For missing satellite observations, gaps of up to 6 hours are statistically interpolated, while longer gaps a supported by climatological 10 day averages.
-Due to its calibration for regional droughts in Africa, the TAMSAT reanalysis presents an ideal baseline for this works postprocessing of seasonal drought predictions.
+Due to its calibration for regional droughts in Africa, the TAMSAT reanalysis presents an ideal baseline for this work's postprocessing of seasonal drought predictions.
 
 \subsection{The ERA5 reanalysis temperature dataset}\label{era5}
 
@@ -68,16 +70,15 @@ Despite the early-period limitations, ERA5 provides one of the longest and most 
 
 \subsection{Data Preprocessing}\label{preprocessing}
 
-Before hindcast and observational datasets can be fed as input to the ML algorithm, they have to be preprocessed.
+Before hindcast and observational datasets input into the ML algorithm, they have to be preprocessed.
 First, in order to ensure parallel resolutions, both observational datasets are remapped to share the common resolution of the GCFS hindcasts.
-Since the GCFS precipitation estimate is measured in total precipitation rate, it also first has to be converted to mean precipitation per month to match the TAMSAT dataset via
+Since the GCFS precipitation estimate is measured in total precipitation rate, it has to be converted to mean precipitation per month to match the TAMSAT dataset via
 
 \begin{align}
     P = tprate \cdot spm ,
 \end{align}
 
 where $spm$ is the amount of seconds per month. \\
-
 Afterwards, the potential evapotranspiration (PET) has to be calculated from the two temperature estimates.
 Due to the lack of other variables, the Hamon method for the calculation of the PET is utilized, only taking the daily mean temperature and latitude at that gridcell as inputs.
 For lack of daily forecast data, the PET is assumed to be stationary over the whole month at the monthly mean temperature.
@@ -91,21 +92,18 @@ In this equation, c is a constant coefficient, N denotes the number of daylight 
 Then, the climatic water balance (CWB) is calculated as the difference between daily precipitation and PET (see equation \ref{cwb}).
 Finally, a monthly mean of the CWB is taken to return to seasonal timescales. \\
 
-
-
 \section{Methods}\label{methods}
 
 This work will use two distinct steps for the postprocessing of seasonal climate predictions.
 First, statistical quantile mapping will reduce the distributional error and biases of the original hindcast as far as possible.
-Subsequently, an ML algorithm will postprocess the residuals left over from the quantile mapping step.
+Subsequently, an ML algorithm will be trained to predict the remaining residuals of the quantile mapped prediction.
 In the following, both the quantile mapping and the ML approach will be described in detail.
 
 \subsection{Statistical Quantile Mapping}\label{qm}
 
 Quantile mapping (QM) is a statistical bias-correction method that can adjust a statistical distribution to match another.
-QM corrects systematic biases by redistributing the values of an input variable to the empirical cumulative distribution functions (CDFs) of target data.
+QM corrects systematic biases by redistributing the values of an input variable to the empirical cumulative distribution functions (CDFs) of a target variable.
 Because the full distribution is adjusted, quantile mapping can correct biases in mean, variance, and extremes \parencite{schwertfeger_python_2023}.
-
 For this work, the Python Cmethods implementation is used \parencite{schwertfeger_python_2023}, where quantile mapping is defined by mapping values from a modeled control distribution to the observational reference distribution.
 The package was especially constructed for the use on climate data.
 The corrected value is calculated via a series of correction steps.
@@ -136,7 +134,6 @@ QM methods have been shown to substantially improve agreement between modeled an
 A key strength of QM for hindcast correction is that it adjusts the entire distribution rather than only mean values, improving representation of extreme events as well as mean and variability representations.
 However, quantile mapping may also alter modeled climate signals.
 For example, \cite{cannon_bias_2015} show that quantile mapping can modify projected trends in extremes even when mean trends are preserved, highlighting trade-offs between bias correction and trend preservation. \\
-
 Overall, quantile mapping provides a robust method for post-processing climate hindcasts.
 Nonetheless, fundamental limiations especially in the correction of temporal sequencing remain that have to be adressed in addition to the quantile mapping.
 This is where this work employs a second postprocessing step, utilizing ML to adress the remaining uncertainties in the prediction.
@@ -145,18 +142,17 @@ This is where this work employs a second postprocessing step, utilizing ML to ad
 \subsection{Residual correction with mixed effect random forests}
 
 In a second postprocessing step, I try to predict the remaining differences between the QM results and the observational reference data.
-In order reach a stable, cost-efficient and at the same time sophisticated ML setup, this work relies on a mixed effect random forest (MERF) architecture.
-This is based on a relatively simple gradient boosted Random Forest model and supplemented by a grouped random effect.
-Therefore, it is important to first explain RFs and the expanded gradient boosted version (XGBoost) before then explaining MERFs and the implications for this work.
+In order to reach a stable, cost-efficient and at the same time sophisticated ML setup, this work experiments with different decision tree based architectures.
+This includes random forests, gradient boosting and mixed effect models.
+Therefore, it is important to first explain RFs and the expanded gradient boosted version (XGBoost) before then explaining mixed effect approaches and their implications for this work.
 
 \subsubsection{Random Forest Machine Learning Models}
 
 In general, Machine Learning can be defined as algorithms that can learn from data without being specifically programmed \parencite{louppe_understanding_2014}.
 An algorithm learns from data when it improves at a certain task, mostly regression or classification tasks, with its input data.
-One of the first subsets of Machine Learning tree structured models.
-Basically, tree structured models divide the input spaces of a classification or regression task into subspaces (trees) and subsequently assign prediction values to all objects within a subspace.
+Decision tree based models were one of the first ML techniques.
+Basically, decision trees divide the input spaces of a classification or regression task into subspaces (trees) and subsequently assign prediction values to all objects within a subspace.
 This division is often conducted in different steps resulting in internal trees (subspaces that are divided again) and terminal trees (the final subspaces, also called leafs) \parencite{louppe_understanding_2014}. \\
-
 In supervised ML, the construction of decision trees is then driven by finding a division, which minimizes a loss for a set of training data.
 Regression or prediction problems are in this case defined as learning a target value (output) for each predictor (input).
 The loss for one tree $\phi$ can be defined as the combined loss for each individual terminal tree $t$ with an element $y_t$:
@@ -170,19 +166,17 @@ Mathematically, it can be quite easily proven that each new terminal tree reduce
 However, such an overcomplex model might reduce the training error for a model, but in most cases then looses its ability to generalize its results for out-of-distribution validation data, which nearly all prediction tasks include.
 Thus, metrics usually have to be chosen to stop the development of additional leafs during training, which minimize the error not only on the training dataset, but more importantly on a separate validation dataset.
 Additionally, further stopping criteria, like restricting the amount of leafs per tree as well as the overall tree's maximum depth, can reduce the risk of overfitting to training data. \\
-
 The basic idea behind Random Forests (RF) as decision-based ML methods is to introduce an ensemble of randomly perturbed decision trees, which are at the end combined again in order to reach a more stable prediction.
-Usually, this combination is conducted by taking the average prediction of all individual trees as the average prediction is assumed to minimize the error compared to the individual, more variante predictions.
+Usually, ensembles of trees take the average prediction of all individual trees, which is assumed to minimize the error compared to the individual, more variante predictions.
 This assumption can be made, as an ensemble is less likely to get stuck in local loss minima and is able to better capture generalization possibilities to unrelated validation data.
-Since the 1990s random forests have been developed and mostly changed in the manner, in which the random perturbations are introduced to the ensemble \parencite{louppe_understanding_2014}.
-Since then, RFs gained widespread use especially  due to their quality at predicting out-of-bag validation data.
+Since the 1990s random forests have developed more and more advanced manners, in which the random perturbations are introduced to the ensemble \parencite{louppe_understanding_2014}.
+With improved prediction results, RFs gained widespread use especially  due to their quality at predicting out-of-bag validation data.
 Additionally, they possess the straightforward ability to assess the importance of individual predictors for the prediction quality.
 This feature of decision trees adds a lot of interpretability and reliability to RFs compared to black-box models, such as neural networks.
 Similarly, due to their ensemble nature, RFs allow the estimation of the proximity of predictor values in the RF's feature space by determining the co-occurence in a common leaf over an ensemble of decision trees.
 In this way, RF results can again be explained better, while outliers in the training dataset become easily identifiable.
 Finally, compared to other more complex ML methods, RFs show high consistency at low computational costs and a relatively simple algorithmic setup.
-Therefore, they reguire less hyperparameter tuning as well as little domain specific ML knowledge for implementation \parencite{louppe_understanding_2014}. \\
-
+Therefore, they require less hyperparameter tuning as well as little domain specific ML knowledge for implementation \parencite{louppe_understanding_2014}. \\
 Due to all these advantages, RFs have found many applications in the climate sciences of recent years \parencite{das_evaluation_2022,valecha_prediction_2018}.
 They even have already been combined with quantile mapping in order to improve bias correction of climate projections \parencite{raeesi_using_2024}.
 In their study, \cite{raeesi_using_2024} have found that RFs can significantly reduce projection errors even after the quantile mapping step.
@@ -193,7 +187,7 @@ Therefore, it is worth looking at further developments of decision tree based ML
 \subsubsection{Gradient Boosting with XGBoost}
 
 XGBoost is a type of gradient boosting algorithm that builds an ensemble of decision trees sequentially, where each new tree focuses on correcting the errors made by the previous ones.
-Unlike random forests, which aggregate the predictions of many independent trees, gradient boosting improves prediction accuracy by iteratively minimizing error. \parencite{karsisto_post-processing_2025}
+Unlike random forests, which aggregate the predictions of many independent trees, gradient boosting improves prediction accuracy by iteratively minimizing error \parencite{karsisto_post-processing_2025}.
 On a general level, XGBoost remains a decision tree based algorithm, where the final prediction can be expressed with
 
 \begin{align}
@@ -225,12 +219,10 @@ The remaining cluster-specific component can then be estimated individually, for
 So basically, the algorithm first removes the random effect from the predictor at each iteration.
 Afterwards, the prediction model, often an ensemble based decision tree model, such as RFs or XGBoost, estimates the fixed effects.
 Then the clustered random effect is newly estimated from the remaining residuals and again subtracted from the original predictor for the next basemodel iteration \parencite{hajjem_mixed_2011}. \\
-
-Simulations show that mixed effect random forest (MERF) methods show significant improvements compared to standard ensemble decision tree algorithms when group effects are non-negligible \parencite{hajjem_mixed-effects_2014}.
+Simulations show that mixed effect random forest (MERF) methods can significantly improve on standard ensemble decision tree algorithms when group effects are non-negligible \parencite{hajjem_mixed-effects_2014}.
 The improvements come especially in the estimation of non-linear relationships in the prediction data.
 Therefore, MERFs should represent a viable option for the postprocessing of climate predictions, where data can be grouped by region or physical properties, for example its value in a certain climatic variable.
-In this work this mixed effect approach will be combined with an XGBoost base model in order to profit from the fast and accurate learning of XGBoost models while at the same time using the mixed effect method for improving on the remaining nonlinear residuals.
-This mixed effect gradient boosting will be called MEGB.
+In this work, a mixed effect approach will be combined with an XGBoost base model in order to profit from the fast and accurate learning of XGBoost models while at the same time using the mixed effect method for improving on the remaining nonlinear residuals.
 
 
 \section{Evaluation Metrics}
@@ -288,7 +280,7 @@ For each prediction the Brier Score (BS) can be defined as
 where $f_i$ denotes the forecast probability, $o_i$ the observered or reference outcome for $n$ number of observed events.
 For an ensemble of predictions, the forecast probability can simply be defined as the mean of the event forecast for all members, with 1 being a predicted event and 0 no event.
 As the $BS$ describes a comparison of event probabilities, it can capture both the calibration of probabilities and a model's separation of events from non-events.
-Thus, on the one hand the BSS includes the ensemble probabilities in its measurement of forecast probabilities and on the other hand does not favor an over or underprediction of all events compared to a simple hitrate.
+Thus, on the one hand the BSS includes the ensemble probabilities in its measurement of forecast probabilities and on the other hand does not favor an over- or underprediction of all events compared to a simple hitrate.
 A new forecast can then be compared to a baseline forecast using
 
 \begin{align}
@@ -297,10 +289,14 @@ A new forecast can then be compared to a baseline forecast using
 
 Consequently, a $BSS > 0$ can be interpreted as an improvement over the event prediction of the baseline forecast, while a $BSS > 0$ means a worse event prediction. \\
 In order to use the $BSS$ a set amount of observational events have to be defined.
-Usually drought extreme events are defined as a certain amount of consecutive days with of a drought metric lower than a percentile threshold.
+Usually drought extreme events are defined as a certain amount of consecutive days with a drought metric not surpassing a predefined percentile threshold.
 As the seasonal predictions utilized in this work only operate on monthly resolution, the consecutive day requirement cannot be taken into account.
-Instead, a drought extreme event will be defined as a monthly mean $CWB \leq 0.05 \cdot \bar{y}$, meaning a $5 \%$ threshold for the drought event definition for both reference and forecast data.
+Instead, a drought extreme event will be defined as a monthly mean $CWB \leq 0.10 \cdot \bar{y}$, meaning a $10 \%$ threshold for the drought event definition for both reference and forecast data.
 On seasonal scales this definition retains its importance especially for agricultural use cases.
+
+\section{Programming and Code}
+
+All code utilized for the analysis described in chapter \ref{results} is programmed in Python. It is openly accessible under \url{https://github.com/slenta/drought-postprocessing}.
 
 
 
