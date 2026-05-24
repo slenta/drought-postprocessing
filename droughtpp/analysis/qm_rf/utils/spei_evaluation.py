@@ -3,13 +3,12 @@ from pathlib import Path
 
 import numpy as np
 import xarray as xr
+from IPython import embed
 
-from droughtpp.evaluation.evaluation import (
+from droughtpp.analysis.qm_rf.utils.evaluation import (
     brier_skill_score_between_ensembles,
     mae_per_member_grid,
     rmse_per_member_grid,
-)
-from droughtpp.analysis.qm_rf.utils.evaluation import (
     _load_var,
     _to_time_lat_lon,
     _to_time_member_lat_lon,
@@ -18,6 +17,22 @@ from droughtpp.analysis.qm_rf.utils.evaluation import (
     select_eval_years,
     prepare_pairwise_skill_evaluation,
     plot_pairwise_skill_evaluation,
+    _monthly_anomalies,
+    _gridwise_correlation,
+    _gridwise_correlation_with_pvalues,
+    _std_over_rmse_maps,
+    compute_gridcell_drought_hit_rate_percent,
+    count_extreme_drought_events,
+)
+from droughtpp.analysis.qm_rf.utils.visualization import (
+    plot_mae_skill_metrics,
+    plot_mean_ensemble_std_maps,
+    plot_drought_hit_rate_maps,
+    plot_extreme_drought_hit_histogram,
+    plot_residual_comparison_maps,
+    plot_event_bss_comparison_maps,
+    plot_example_time_means,
+    _mean_ensemble_std_map,
 )
 
 
@@ -31,6 +46,7 @@ def evaluate_spei(
     std_multiplier: float = 1.0,
     plot_dir: Path | None = None,
     land_mask_path: Path | None = None,
+    qm_hindcasts_json: Path | None = None,
 ):
     if eval_years is None:
         eval_years = []
@@ -46,6 +62,11 @@ def evaluate_spei(
     corrected_members = []
     baseline_members = []
     reference_members = []
+    qm_members = []
+
+    qm_hindcast_paths = (
+        load_paths_from_json(qm_hindcasts_json) if qm_hindcasts_json else None
+    )
 
     for baseline_spei_path, corrected_spei_path in zip(
         baseline_spei_paths, corrected_spei_paths
@@ -66,68 +87,262 @@ def evaluate_spei(
         corrected_members.append(corrected_spei)
         baseline_members.append(baseline_spei)
         reference_members.append(reference_member)
+        qm_spei = load_eval_data(qm_hindcast_paths[len(qm_members)], spei_var)
+        qm_spei = select_eval_years(qm_spei, eval_years)
+        qm_spei, _, _ = xr.align(qm_spei, baseline_spei, reference_member, join="inner")
+        qm_members.append(qm_spei)
+    
 
     skill = prepare_pairwise_skill_evaluation(
         corrected_members,
         baseline_members,
         reference_members,
+        qm_members=qm_members if qm_members else None,
         eval_years=eval_years,
-        primary_label="RF-corrected",
-        secondary_label="Original",
+        ml_label="RF-corrected",
+        baseline_label="Original",
+        std_multiplier=std_multiplier
     )
 
     common_time = skill["common_time"]
-    corrected_ensemble = skill["primary_ensemble"]
-    baseline_ensemble = skill["secondary_ensemble"]
+    ml_ensemble = skill["ml_ensemble"]
+    baseline_ensemble = skill["baseline_ensemble"]
     reference = skill["reference"]
 
-    corrected_np = skill["primary_np"]
-    baseline_np = skill["secondary_np"]
+    ml_np = skill["ml_np"]
+    baseline_np = skill["baseline_np"]
     reference_np = skill["reference_np"]
 
-    mae_corrected_member = skill["mae_primary_member"]
-    mae_baseline_member = skill["mae_secondary_member"]
+    mae_ml_member = skill["mae_ml_member"]
+    mae_baseline_member = skill["mae_baseline_member"]
 
-    rmse_corrected_member = skill["rmse_primary_member"]
-    rmse_baseline_member = skill["rmse_secondary_member"]
+    rmse_ml_member = skill["rmse_ml_member"]
+    rmse_baseline_member = skill["rmse_baseline_member"]
 
-    mae_corrected = np.nanmean(mae_corrected_member, axis=0)
+    mae_ml = np.nanmean(mae_ml_member, axis=0)
     mae_baseline = np.nanmean(mae_baseline_member, axis=0)
-    mae_diff = mae_corrected - mae_baseline
+    mae_diff = mae_ml - mae_baseline
 
-    rmse_corrected = np.nanmean(rmse_corrected_member, axis=0)
+    rmse_ml = np.nanmean(rmse_ml_member, axis=0)
     rmse_baseline = np.nanmean(rmse_baseline_member, axis=0)
-    rmse_diff = rmse_corrected - rmse_baseline
+    rmse_diff = rmse_ml - rmse_baseline
 
     bss_upper = skill["bss_upper"]
     bss_lower = skill["bss_lower"]
-    bs_corrected_upper = skill["bs_primary_upper"]
-    bs_baseline_upper = skill["bs_secondary_upper"]
-    bs_corrected_lower = skill["bs_primary_lower"]
-    bs_baseline_lower = skill["bs_secondary_lower"]
+    bs_ml_upper = skill["bs_ml_upper"]
+    bs_baseline_upper = skill["bs_baseline_upper"]
+    bs_ml_lower = skill["bs_ml_lower"]
+    bs_baseline_lower = skill["bs_baseline_lower"]
+    latitude = reference_spei.latitude.values if "latitude" in reference_spei.coords else None
+    longitude = reference_spei.longitude.values if "longitude" in reference_spei.coords else None
 
     if plot_dir is not None:
         plot_pairwise_skill_evaluation(
-            plot_dir=Path(plot_dir) / "rf_spei_results",
+            plot_dir=Path(plot_dir),
             skill=skill,
+            reference_all=reference.values,
+            variable_name=spei_var,
             land_mask_path=land_mask_path,
+            include_timeseries=True,
+            include_example_time_means=True,
+            include_difference_examples=False,
+            include_anomalies=False,
+            latitude=latitude,
+            longitude=longitude,
+        )
+
+
+        # Additional CWB-like plots: correlations, std/RMSE, and event-based plots
+        # extract ensembles and arrays
+        ml_ensemble = skill["ml_ensemble"]
+        baseline_ensemble = skill["baseline_ensemble"]
+        reference_da = skill["reference"]
+        ml_np = skill["ml_np"]
+        baseline_np = skill["baseline_np"]
+        reference_np = skill["reference_np"]
+
+
+        qm_ensemble = skill.get("qm_ensemble")
+        qm_np = skill.get("qm_np")
+
+        # Correlation maps using monthly anomalies
+        correlation_secondary_source = _monthly_anomalies(baseline_ensemble)
+        correlation_primary_source = _monthly_anomalies(ml_ensemble)
+        correlation_reference_source = _monthly_anomalies(reference_da)
+        correlation_qm_source = _monthly_anomalies(qm_ensemble)
+
+        correlation_secondary_np = correlation_secondary_source.values
+        correlation_primary_np = correlation_primary_source.values
+        correlation_reference_np = correlation_reference_source.values
+        correlation_qm_np = correlation_qm_source.values if correlation_qm_source is not None else None
+
+        correlation_secondary_member = _gridwise_correlation(
+            correlation_secondary_np,
+            correlation_reference_np,
+        )
+        correlation_primary_member = _gridwise_correlation(
+            correlation_primary_np,
+            correlation_reference_np,
+        )
+        correlation_qm_member = (
+            _gridwise_correlation(correlation_qm_np, correlation_reference_np)
+            if correlation_qm_np is not None
+            else None
+        )
+
+        correlation_secondary_pvalues = None
+        correlation_primary_pvalues = None
+        correlation_qm_pvalues = None
+        try:
+            correlation_secondary_member, correlation_secondary_pvalues = _gridwise_correlation_with_pvalues(
+                correlation_secondary_np,
+                correlation_reference_np,
+            )
+            correlation_primary_member, correlation_primary_pvalues = _gridwise_correlation_with_pvalues(
+                correlation_primary_np,
+                correlation_reference_np,
+            )
+            if correlation_qm_np is not None:
+                correlation_qm_member, correlation_qm_pvalues = _gridwise_correlation_with_pvalues(
+                    correlation_qm_np,
+                    correlation_reference_np,
+                )
+        except Exception:
+            # p-values optional; ignore failures
+            pass
+
+        plot_mae_skill_metrics(
+            correlation_secondary_member,
+            correlation_primary_member,
+            correlation_qm_member,
+            out_dir=str(plot_dir),
+            n_members_display=3,
+            metric_name="Correlation",
+            file_prefix="correlation",
+            land_mask_path=land_mask_path,
+            stipple_significant=False,
+            latitude=latitude,
+            longitude=longitude,
+        )
+
+        if qm_ensemble is not None:
+            plot_mean_ensemble_std_maps(
+                qm_dataarray=qm_ensemble,
+                ml_dataarray=ml_ensemble,
+                original_dataarray=baseline_ensemble,
+                output_path=Path(plot_dir) / "mean_ensemble_std_maps.png",
+                land_mask_path=land_mask_path,
+                latitude=latitude,
+                longitude=longitude,
+            )
+
+            qm_std_over_rmse = _std_over_rmse_maps(
+                _mean_ensemble_std_map(qm_ensemble),
+                skill["rmse_qm_member"],
+            )
+            ml_std_over_rmse = _std_over_rmse_maps(
+                _mean_ensemble_std_map(ml_ensemble),
+                skill["rmse_ml_member"],
+            )
+            original_std_over_rmse = _std_over_rmse_maps(
+                _mean_ensemble_std_map(baseline_ensemble),
+                skill["rmse_baseline_member"],
+            )
+            plot_mae_skill_metrics(
+                original_std_over_rmse,
+                ml_std_over_rmse,
+                qm_std_over_rmse,
+                out_dir=str(plot_dir),
+                n_members_display=3,
+                metric_name="Std/RMSE",
+                file_prefix="std_over_rmse",
+                land_mask_path=land_mask_path,
+                latitude=latitude,
+                longitude=longitude,
+            )
+
+        # Event-based diagnostics (SPEI droughts are 'below' extremes)
+        threshold_lower_p10 = np.nanpercentile(reference_np, 10.0, axis=0)
+
+        if qm_np is not None:
+            baseline_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
+                baseline_np,
+                reference_np,
+                threshold_lower_p10,
+            )
+            qm_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
+                qm_np,
+                reference_np,
+                threshold_lower_p10,
+            )
+            ml_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
+                ml_np,
+                reference_np,
+                threshold_lower_p10,
+            )
+            plot_drought_hit_rate_maps(
+                baseline_hit_rate_p10,
+                qm_hit_rate_p10,
+                ml_hit_rate_p10,
+                out_dir=str(plot_dir),
+                lower_threshold_label="P10",
+                file_prefix="drought_hit_rate_p10",
+                latitude=latitude,
+                longitude=longitude,
+            )
+
+        extreme_drought_counts = [
+            (
+                "Original",
+                *count_extreme_drought_events(
+                    baseline_np,
+                    reference_np,
+                    threshold_lower_p10,
+                ),
+            )
+        ]
+        if qm_np is not None:
+            extreme_drought_counts.append(
+                (
+                    "QM",
+                    *count_extreme_drought_events(
+                        qm_np,
+                        reference_np,
+                        threshold_lower_p10,
+                    ),
+                )
+            )
+        extreme_drought_counts.append(
+            (
+                "ML-corrected",
+                *count_extreme_drought_events(
+                        ml_np,
+                    reference_np,
+                    threshold_lower_p10,
+                ),
+            )
+        )
+
+        plot_extreme_drought_hit_histogram(
+            extreme_drought_counts,
+            out_dir=str(plot_dir),
+            lower_percentile=10.0,
+            file_prefix="extreme_drought_p10_histogram",
         )
 
     return {
-        "spei_mae_corrected_mean": float(np.nanmean(mae_corrected)),
+        "spei_mae_corrected_mean": float(np.nanmean(mae_ml)),
         "spei_mae_baseline_mean": float(np.nanmean(mae_baseline)),
         "spei_mae_diff_mean": float(np.nanmean(mae_diff)),
-        "spei_rmse_corrected_mean": float(np.nanmean(rmse_corrected)),
+        "spei_rmse_corrected_mean": float(np.nanmean(rmse_ml)),
         "spei_rmse_baseline_mean": float(np.nanmean(rmse_baseline)),
         "spei_rmse_diff_mean": float(np.nanmean(rmse_diff)),
-        "spei_bs_corrected_upper_mean": float(np.nanmean(bs_corrected_upper)),
+        "spei_bs_corrected_upper_mean": float(np.nanmean(bs_ml_upper)),
         "spei_bs_baseline_upper_mean": float(np.nanmean(bs_baseline_upper)),
         "spei_bss_upper_mean": float(np.nanmean(bss_upper)),
-        "spei_bs_corrected_lower_mean": float(np.nanmean(bs_corrected_lower)),
+        "spei_bs_corrected_lower_mean": float(np.nanmean(bs_ml_lower)),
         "spei_bs_baseline_lower_mean": float(np.nanmean(bs_baseline_lower)),
         "spei_bss_lower_mean": float(np.nanmean(bss_lower)),
-        "spei_n_members": int(corrected_ensemble.sizes["member"]),
-        "spei_n_time": int(corrected_ensemble.sizes["time"]),
     }
 
 
@@ -194,14 +409,20 @@ def evaluate_spei_pair(
 
     if plot_dir is not None:
         helper_skill = {
-            "mae_secondary_member": mae_gt_member,
-            "mae_primary_member": mae_output_member,
-            "rmse_secondary_member": rmse_gt_member,
-            "rmse_primary_member": rmse_output_member,
-            "mean_bias_secondary_member": np.nanmean(
+            "ml_np": output_np,
+            "baseline_np": gt_np,
+            "reference_np": reference_np,
+            "ml_ensemble": output_da,
+            "baseline_ensemble": gt_da,
+            "reference": reference_da,
+            "mae_baseline_member": mae_gt_member,
+            "mae_ml_member": mae_output_member,
+            "rmse_baseline_member": rmse_gt_member,
+            "rmse_ml_member": rmse_output_member,
+            "mean_bias_baseline_member": np.nanmean(
                 gt_np - reference_np[:, None, :, :], axis=0
             ),
-            "mean_bias_primary_member": np.nanmean(
+            "mean_bias_ml_member": np.nanmean(
                 output_np - reference_np[:, None, :, :], axis=0
             ),
             "bss_upper": bss_upper,
@@ -210,9 +431,10 @@ def evaluate_spei_pair(
             "bss_p10_lower": bss_lower,
         }
         plot_pairwise_skill_evaluation(
-            plot_dir=Path(plot_dir) / "rf_spei_results",
+            plot_dir=Path(plot_dir),
             skill=helper_skill,
             land_mask_path=land_mask_path,
+            variable_name=output_var,
         )
 
     return {

@@ -1179,6 +1179,9 @@ def evaluate(config_path: Path | None = None, config_overrides=None):
                 std_multiplier=float(cfg["spei_std_multiplier"]),
                 plot_dir=plot_dir,
                 land_mask_path=cfg.get("land_mask_path"),
+                qm_hindcasts_json=(
+                    Path(cfg["output_dir"]) / "paths" / var_name / f"nq{int(cfg['qm_arguments']['n_quantiles'])}" / f"lm{leadmonth}" / "qm_hindcast_paths.json"
+                ),
             )
             metrics.update(spei_metrics)
             metrics_path = (

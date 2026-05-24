@@ -8,11 +8,6 @@ import xarray as xr
 from tqdm import tqdm
 from IPython import embed
 
-from droughtpp.evaluation.evaluation import (
-    brier_skill_score_between_ensembles,
-    mae_per_member_grid,
-    rmse_per_member_grid,
-)
 from droughtpp.analysis.qm_rf.utils.visualization import (
     plot_bss_skill_metrics,
     plot_event_bss_comparison_maps,
@@ -104,6 +99,151 @@ def compute_pairwise_distributions(
         dist_by_member[f"member_{i:02d}"] = entry
 
     return dist_by_member
+
+
+def mae_per_member_grid(ensemble, reference):
+    """
+    Compute MAE per ensemble member and grid cell.
+
+    Expects:
+      - ensemble: shape (time, ensemble, lat, lon)
+      - reference: shape (time, lat, lon)
+
+    Returns:
+      - np.ndarray shape (ensemble, lat, lon) with mean absolute error over time.
+    """
+    if hasattr(ensemble, "detach"):
+        ensemble = ensemble.detach().cpu().numpy()
+    if hasattr(reference, "detach"):
+        reference = reference.detach().cpu().numpy()
+    ensemble = np.asarray(ensemble)
+    reference = np.asarray(reference)
+
+    if ensemble.ndim != 4:
+        raise ValueError("ensemble must have shape (time, ensemble, lat, lon)")
+    if reference.ndim != 3:
+        raise ValueError("reference must have shape (time, lat, lon)")
+
+    ntime, nmem, nlat, nlon = ensemble.shape
+    if reference.shape != (ntime, nlat, nlon):
+        raise ValueError(
+            f"reference shape {reference.shape} does not match ensemble time/spatial shape {(ntime, nlat, nlon)}"
+        )
+
+    abs_err = np.abs(ensemble - reference[:, None, :, :])
+    return np.nanmean(abs_err, axis=0)
+
+
+def rmse_per_member_grid(ensemble, reference):
+    """
+    Compute RMSE per ensemble member and grid cell.
+
+    Expects:
+      - ensemble: shape (time, ensemble, lat, lon)
+      - reference: shape (time, lat, lon)
+
+    Returns:
+      - np.ndarray shape (ensemble, lat, lon) with root mean squared error over time.
+    """
+    if hasattr(ensemble, "detach"):
+        ensemble = ensemble.detach().cpu().numpy()
+    if hasattr(reference, "detach"):
+        reference = reference.detach().cpu().numpy()
+    ensemble = np.asarray(ensemble)
+    reference = np.asarray(reference)
+
+    ntime, nmem, nlat, nlon = ensemble.shape
+    if reference.shape != (ntime, nlat, nlon):
+        raise ValueError(
+            f"reference shape {reference.shape} does not match ensemble time/spatial shape {(ntime, nlat, nlon)}"
+        )
+
+    sq_err = (ensemble - reference[:, None, :, :]) ** 2
+    return np.sqrt(np.nanmean(sq_err, axis=0))
+
+
+def mean_bias_per_member_grid(ensemble, reference):
+    """
+    Compute mean signed bias per ensemble member and grid cell.
+
+    Bias is forecast minus reference.
+    """
+    if hasattr(ensemble, "detach"):
+        ensemble = ensemble.detach().cpu().numpy()
+    if hasattr(reference, "detach"):
+        reference = reference.detach().cpu().numpy()
+    ensemble = np.asarray(ensemble)
+    reference = np.asarray(reference)
+
+    ntime, nmem, nlat, nlon = ensemble.shape
+    if reference.shape != (ntime, nlat, nlon):
+        raise ValueError(
+            f"reference shape {reference.shape} does not match ensemble time/spatial shape {(ntime, nlat, nlon)}"
+        )
+
+    bias = ensemble - reference[:, None, :, :]
+    return np.nanmean(bias, axis=0)
+
+
+def brier_score_grid(ensemble, reference, std_multiplier=1.0, extreme_type="upper"):
+    """
+    Compute Brier Score per grid cell from an ensemble and reference.
+    """
+    ref_mean = np.nanmean(reference, axis=0)
+    ref_std = np.nanstd(reference, axis=0)
+    threshold = ref_mean + std_multiplier * ref_std
+
+    if extreme_type == "upper":
+        obs = (reference > threshold[None, :, :]).astype(float)
+        p = np.mean(ensemble > threshold[None, None, :, :], axis=1)
+    elif extreme_type == "lower":
+        obs = (reference < threshold[None, :, :]).astype(float)
+        p = np.mean(ensemble < threshold[None, None, :, :], axis=1)
+    else:
+        raise ValueError("extreme_type must be either 'upper' or 'lower'")
+
+    return np.nanmean((p - obs) ** 2, axis=0)
+
+
+def brier_skill_score_between_ensembles(
+    ens_a,
+    ens_b,
+    reference,
+    std_multiplier=1.0,
+    extreme_type="upper",
+):
+    """
+    Compute Brier Skill Score (BSS) per grid cell comparing two ensembles.
+    """
+    if hasattr(ens_a, "detach"):
+        ens_a = ens_a.detach().cpu().numpy()
+    if hasattr(ens_b, "detach"):
+        ens_b = ens_b.detach().cpu().numpy()
+    if hasattr(reference, "detach"):
+        reference = reference.detach().cpu().numpy()
+
+    ens_a = np.asarray(ens_a)
+    ens_b = np.asarray(ens_b)
+    reference = np.asarray(reference)
+
+    bs_a = brier_score_grid(
+        ens_a,
+        reference,
+        std_multiplier=std_multiplier,
+        extreme_type=extreme_type,
+    )
+    bs_b = brier_score_grid(
+        ens_b,
+        reference,
+        std_multiplier=std_multiplier,
+        extreme_type=extreme_type,
+    )
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        bss = 1.0 - (bs_a / bs_b)
+        bss[np.isclose(bs_b, 0.0)] = np.nan
+
+    return bss, bs_a, bs_b
 
 
 def load_paths_from_json(json_path: Path) -> list[Path]:
@@ -484,6 +624,70 @@ def _infer_lat_lon_names(da):
     return lat_name, lon_name
 
 
+def _monthly_anomalies(data_array: xr.DataArray) -> xr.DataArray:
+    monthly_climatology = data_array.groupby("time.month").mean("time")
+    return data_array.groupby("time.month") - monthly_climatology
+
+
+def _gridwise_correlation(ensemble_np, reference_np):
+    n_time, n_members, n_lat, n_lon = ensemble_np.shape
+    correlation = np.full((n_members, n_lat * n_lon), np.nan, dtype=float)
+    reference_flat = reference_np.reshape(n_time, -1)
+
+    for member_idx in range(n_members):
+        member_flat = ensemble_np[:, member_idx].reshape(n_time, -1)
+        for cell_idx in range(n_lat * n_lon):
+            member_values = member_flat[:, cell_idx]
+            reference_values = reference_flat[:, cell_idx]
+            valid = np.isfinite(member_values) & np.isfinite(reference_values)
+            if np.count_nonzero(valid) > 1:
+                member_valid = member_values[valid]
+                reference_valid = reference_values[valid]
+                if np.nanstd(member_valid) > 0 and np.nanstd(reference_valid) > 0:
+                    correlation[member_idx, cell_idx] = np.corrcoef(
+                        member_valid,
+                        reference_valid,
+                    )[0, 1]
+
+    return correlation.reshape(n_members, n_lat, n_lon)
+
+
+def _gridwise_correlation_with_pvalues(ensemble_np, reference_np):
+    from scipy.stats import pearsonr
+
+    n_time, n_members, n_lat, n_lon = ensemble_np.shape
+    correlation = np.full((n_members, n_lat * n_lon), np.nan, dtype=float)
+    pvalues = np.full((n_members, n_lat * n_lon), np.nan, dtype=float)
+    reference_flat = reference_np.reshape(n_time, -1)
+
+    for member_idx in range(n_members):
+        member_flat = ensemble_np[:, member_idx].reshape(n_time, -1)
+        for cell_idx in range(n_lat * n_lon):
+            member_values = member_flat[:, cell_idx]
+            reference_values = reference_flat[:, cell_idx]
+            valid = np.isfinite(member_values) & np.isfinite(reference_values)
+            if np.count_nonzero(valid) > 1:
+                member_valid = member_values[valid]
+                reference_valid = reference_values[valid]
+                if np.nanstd(member_valid) > 0 and np.nanstd(reference_valid) > 0:
+                    r_value, p_value = pearsonr(member_valid, reference_valid)
+                    correlation[member_idx, cell_idx] = r_value
+                    pvalues[member_idx, cell_idx] = p_value
+
+    return correlation.reshape(n_members, n_lat, n_lon), pvalues.reshape(n_members, n_lat, n_lon)
+
+
+def _std_over_rmse_maps(std_map: xr.DataArray, rmse_member: np.ndarray) -> np.ndarray:
+    std_values = np.asarray(std_map.values, dtype=float)
+    ratio_members = []
+    for member_rmse in np.asarray(rmse_member, dtype=float):
+        ratio = np.full_like(member_rmse, np.nan, dtype=float)
+        valid = np.isfinite(member_rmse) & (member_rmse != 0)
+        ratio[valid] = std_values[valid] / member_rmse[valid]
+        ratio_members.append(ratio)
+    return np.stack(ratio_members, axis=0)
+
+
 def _load_var(path, var_name):
     with xr.open_dataset(path, decode_times=False) as ds:
         if var_name not in ds:
@@ -513,79 +717,84 @@ def _to_time_lat_lon(da):
 
 
 def prepare_pairwise_skill_evaluation(
-    primary_members,
-    secondary_members,
+    ml_members,
+    baseline_members,
     reference_members,
     eval_years=None,
     qm_members=None,
-    primary_label="Primary",
-    secondary_label="Secondary",
+    ml_label="ML-corrected",
+    baseline_label="Original",
     std_multiplier: float = 1.0,
 ):
     if eval_years is None:
         eval_years = []
 
     common_time = intersect_time_coordinates(
-        primary_members
-        + secondary_members
-        + reference_members
-        + (qm_members if qm_members else [])
+        ml_members + baseline_members + reference_members + (qm_members if qm_members else [])
     )
 
-    primary_members = [member.sel(time=common_time) for member in primary_members]
-    secondary_members = [member.sel(time=common_time) for member in secondary_members]
+    ml_members = [member.sel(time=common_time) for member in ml_members]
+    baseline_members = [member.sel(time=common_time) for member in baseline_members]
     reference_members = [member.sel(time=common_time) for member in reference_members]
     if qm_members:
         qm_members = [member.sel(time=common_time) for member in qm_members]
-
-    primary_ensemble = xr.concat(primary_members, dim="member").transpose(
+    ml_ensemble = xr.concat(ml_members, dim="member").transpose(
         "time", "member", "latitude", "longitude"
     )
-    secondary_ensemble = xr.concat(secondary_members, dim="member").transpose(
+    baseline_ensemble = xr.concat(baseline_members, dim="member").transpose(
         "time", "member", "latitude", "longitude"
     )
     reference = reference_members[0].transpose("time", "latitude", "longitude")
 
-    primary_np = primary_ensemble.values
-    secondary_np = secondary_ensemble.values
+    ml_np = ml_ensemble.values
+    baseline_np = baseline_ensemble.values
     reference_np = reference.values
 
     result = {
         "common_time": common_time,
-        "primary_ensemble": primary_ensemble,
-        "secondary_ensemble": secondary_ensemble,
+        "ml_ensemble": ml_ensemble,
+        "baseline_ensemble": baseline_ensemble,
         "reference": reference,
-        "primary_np": primary_np,
-        "secondary_np": secondary_np,
+        "ml_np": ml_np,
+        "baseline_np": baseline_np,
         "reference_np": reference_np,
-        "primary_label": primary_label,
-        "secondary_label": secondary_label,
+        "ml_label": ml_label,
+        "baseline_label": baseline_label,
     }
 
-    result["mae_primary_member"] = mae_per_member_grid(primary_np, reference_np)
-    result["mae_secondary_member"] = mae_per_member_grid(secondary_np, reference_np)
-    result["rmse_primary_member"] = rmse_per_member_grid(primary_np, reference_np)
-    result["rmse_secondary_member"] = rmse_per_member_grid(secondary_np, reference_np)
-    result["mean_bias_primary_member"] = np.nanmean(
-        primary_np - reference_np[:, None, :, :], axis=0
-    )
-    result["mean_bias_secondary_member"] = np.nanmean(
-        secondary_np - reference_np[:, None, :, :], axis=0
+    result["mae_ml_member"] = mae_per_member_grid(ml_np, reference_np)
+    result["mae_baseline_member"] = mae_per_member_grid(baseline_np, reference_np)
+    result["rmse_ml_member"] = rmse_per_member_grid(ml_np, reference_np)
+    result["rmse_baseline_member"] = rmse_per_member_grid(baseline_np, reference_np)
+    result["mean_bias_ml_member"] = np.nanmean(ml_np - reference_np[:, None, :, :], axis=0)
+    result["mean_bias_baseline_member"] = np.nanmean(
+        baseline_np - reference_np[:, None, :, :], axis=0
     )
 
-    result["bss_upper"], result["bss_lower"], *_ = (
-        brier_skill_score_between_ensembles_percentile(
-            primary_np,
-            secondary_np,
-            reference_np,
-            upper_percentile=90.0,
-            lower_percentile=10.0,
-        )
+    (
+        bss_upper,
+        bss_lower,
+        bs_ml_upper,
+        bs_baseline_upper,
+        bs_ml_lower,
+        bs_baseline_lower,
+    ) = brier_skill_score_between_ensembles_percentile(
+        ml_np,
+        baseline_np,
+        reference_np,
+        upper_percentile=90.0,
+        lower_percentile=10.0,
     )
+    result["bss_upper"] = bss_upper
+    result["bss_lower"] = bss_lower
     result["bss_p90_upper"], result["bss_p10_lower"] = (
         result["bss_upper"],
         result["bss_lower"],
     )
+    result["bs_ml_upper"] = bs_ml_upper
+    result["bs_baseline_upper"] = bs_baseline_upper
+    result["bs_ml_lower"] = bs_ml_lower
+    result["bs_baseline_lower"] = bs_baseline_lower
 
     if qm_members:
         qm_ensemble = xr.concat(qm_members, dim="member").transpose(
@@ -601,14 +810,14 @@ def prepare_pairwise_skill_evaluation(
         )
         # Use percentile-based extremes (P90/P10) for event BSS comparisons
         (
-            result["bss_primary_vs_qm_upper"],
-            result["bss_primary_vs_qm_lower"],
+            result["bss_ml_vs_qm_upper"],
+            result["bss_ml_vs_qm_lower"],
             _,
             _,
             _,
             _,
         ) = brier_skill_score_between_ensembles_percentile(
-            primary_np,
+            ml_np,
             qm_np,
             reference_np,
             upper_percentile=90.0,
@@ -616,15 +825,15 @@ def prepare_pairwise_skill_evaluation(
         )
 
         (
-            result["bss_qm_vs_secondary_upper"],
-            result["bss_qm_vs_secondary_lower"],
+            result["bss_qm_vs_baseline_upper"],
+            result["bss_qm_vs_baseline_lower"],
             _,
             _,
             _,
             _,
         ) = brier_skill_score_between_ensembles_percentile(
             qm_np,
-            secondary_np,
+            baseline_np,
             reference_np,
             upper_percentile=90.0,
             lower_percentile=10.0,
@@ -657,13 +866,13 @@ def plot_pairwise_skill_evaluation(
     qm_ensemble = skill.get("qm_ensemble")
     qm_np = skill.get("qm_np")
 
-    mae_reference_member = np.zeros_like(skill["mae_secondary_member"])
-    rmse_reference_member = np.zeros_like(skill["rmse_secondary_member"])
-    mean_bias_reference_member = np.zeros_like(skill["mean_bias_secondary_member"])
+    mae_reference_member = np.zeros_like(skill["mae_baseline_member"])
+    rmse_reference_member = np.zeros_like(skill["rmse_baseline_member"])
+    mean_bias_reference_member = np.zeros_like(skill["mean_bias_baseline_member"])
 
     distributions = compute_pairwise_distributions(
-        baseline_ensemble=skill["secondary_np"],
-        primary_ensemble=skill["primary_np"],
+        baseline_ensemble=skill["baseline_np"],
+        primary_ensemble=skill["ml_np"],
         reference=skill["reference_np"],
         qm_ensemble=qm_np,
     )
@@ -689,8 +898,8 @@ def plot_pairwise_skill_evaluation(
         )
 
     plot_mae_skill_metrics(
-        skill["mae_secondary_member"],
-        skill["mae_primary_member"],
+        skill["mae_baseline_member"],
+        skill["mae_ml_member"],
         mae_qm_member,
         out_dir=str(plot_dir),
         n_members_display=3,
@@ -702,8 +911,8 @@ def plot_pairwise_skill_evaluation(
     )
 
     plot_mae_skill_metrics(
-        skill["rmse_secondary_member"],
-        skill["rmse_primary_member"],
+        skill["rmse_baseline_member"],
+        skill["rmse_ml_member"],
         rmse_qm_member,
         out_dir=str(plot_dir),
         n_members_display=3,
@@ -715,8 +924,8 @@ def plot_pairwise_skill_evaluation(
     )
 
     plot_mae_skill_metrics(
-        skill["mean_bias_secondary_member"],
-        skill["mean_bias_primary_member"],
+        skill["mean_bias_baseline_member"],
+        skill["mean_bias_ml_member"],
         mean_bias_qm_member,
         out_dir=str(plot_dir),
         n_members_display=3,
@@ -746,31 +955,31 @@ def plot_pairwise_skill_evaluation(
             file_prefix="bss_p90_p10",
             upper_threshold_label="P90",
             lower_threshold_label="P10",
-            title_prefix="RF-corrected vs Original",
+            title_prefix="ML vs Baseline",
             land_mask_path=land_mask_path,
             latitude=latitude,
             longitude=longitude,
         )
 
-        if skill.get("bss_primary_vs_qm_upper") is not None:
+        if skill.get("bss_ml_vs_qm_upper") is not None:
             plot_bss_skill_metrics(
-                skill["bss_primary_vs_qm_upper"],
-                skill["bss_primary_vs_qm_lower"],
+                skill["bss_ml_vs_qm_upper"],
+                skill["bss_ml_vs_qm_lower"],
                 out_dir=str(plot_dir),
-                file_prefix="bss_rf_vs_qm",
+                file_prefix="bss_ml_vs_qm",
                 upper_threshold_label="mean + 1σ",
                 lower_threshold_label="mean - 1σ",
-                title_prefix="RF vs QM",
+                title_prefix="ML vs QM",
                 land_mask_path=land_mask_path,
                 latitude=latitude,
                 longitude=longitude,
             )
 
-        if skill.get("bss_qm_vs_secondary_upper") is not None:
+        if skill.get("bss_qm_vs_baseline_upper") is not None:
             plot_event_bss_comparison_maps(
-                bss_qm_vs_orig=skill["bss_qm_vs_secondary_upper"],
+                bss_qm_vs_orig=skill["bss_qm_vs_baseline_upper"],
                 bss_ml_vs_orig=skill["bss_upper"],
-                bss_ml_vs_qm=skill["bss_primary_vs_qm_upper"],
+                bss_ml_vs_qm=skill["bss_ml_vs_qm_upper"],
                 out_dir=str(plot_dir),
                 threshold_label="90th percentile",
                 file_prefix="bss_comparison_upper",
@@ -779,9 +988,9 @@ def plot_pairwise_skill_evaluation(
                 longitude=longitude,
             )
             plot_event_bss_comparison_maps(
-                bss_qm_vs_orig=skill["bss_qm_vs_secondary_lower"],
+                bss_qm_vs_orig=skill["bss_qm_vs_baseline_lower"],
                 bss_ml_vs_orig=skill["bss_lower"],
-                bss_ml_vs_qm=skill["bss_primary_vs_qm_lower"],
+                bss_ml_vs_qm=skill["bss_ml_vs_qm_lower"],
                 out_dir=str(plot_dir),
                 threshold_label="10th percentile",
                 file_prefix="bss_comparison_lower",
@@ -792,8 +1001,8 @@ def plot_pairwise_skill_evaluation(
 
     if include_timeseries:
         plot_ensemble_timeseries(
-            skill["secondary_ensemble"].values,
-            skill["primary_ensemble"].values,
+            skill["baseline_ensemble"].values,
+            skill["ml_ensemble"].values,
             skill["reference"].values,
             out_dir=str(plot_dir),
             qm_ensemble=qm_ensemble.values if qm_ensemble is not None else None,
@@ -806,8 +1015,8 @@ def plot_pairwise_skill_evaluation(
         plot_ml_eval_summary_maps(
             reference_all=reference_all,
             reference_eval=skill["reference"].values,
-            corrected_ensemble=skill["primary_ensemble"].values,
-            baseline_ensemble=skill["secondary_ensemble"].values,
+            corrected_ensemble=skill["ml_ensemble"].values,
+            baseline_ensemble=skill["baseline_ensemble"].values,
             qm_ensemble=qm_ensemble.values if qm_ensemble is not None else None,
             out_dir=str(plot_dir),
             variable_name=variable_name,
@@ -816,9 +1025,9 @@ def plot_pairwise_skill_evaluation(
 
     if include_example_time_means:
         plot_example_time_means(
-            skill["secondary_ensemble"],
+            skill["baseline_ensemble"],
             qm_ensemble if qm_ensemble is not None else None,
-            skill["primary_ensemble"],
+            skill["ml_ensemble"],
             skill["reference"],
             out_dir=str(plot_dir),
             n_members_display=3,
@@ -828,9 +1037,9 @@ def plot_pairwise_skill_evaluation(
 
     if include_difference_examples:
         plot_example_time_means(
-            skill["secondary_ensemble"],
+            skill["baseline_ensemble"],
             qm_ensemble if qm_ensemble is not None else None,
-            skill["primary_ensemble"],
+            skill["ml_ensemble"],
             skill["reference"],
             out_dir=str(plot_dir),
             n_members_display=3,

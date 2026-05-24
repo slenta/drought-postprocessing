@@ -17,17 +17,34 @@ from pathlib import Path
 from typing import List
 from IPython import embed
 import numpy as np
+import scipy.stats as sps
 
 import xarray as xr
 
 from droughtpp.analysis.qm_rf.config_loader import get_qm_rf_global_config
 from droughtpp.analysis.qm_rf.utils.cwb_evaluation import evaluate_cwb
+from droughtpp.analysis.qm_rf.utils.spei_evaluation import evaluate_spei
 from droughtpp.analysis.qm_rf.utils.visualization import plot_leadmonth_skill_timeseries
+from droughtpp.evaluation.spei_calculation.spei_calc import compute_spei_for_path_list
 
 
 def load_json(path: Path) -> List[str]:
     with open(path, "r") as fh:
         return json.load(fh)
+
+
+def load_json_or_fragments(path: Path) -> List[str]:
+    fragments = sorted(path.parent.glob(f"{path.stem}.task*_of_*.json"))
+    if fragments:
+        combined = []
+        for fragment in fragments:
+            combined.extend(load_json(fragment))
+
+        write_json(path, combined)
+        return combined
+
+
+    return load_json(path)
 
 
 def write_json(path: Path, data: List[str]) -> None:
@@ -88,8 +105,6 @@ def main():
             per_year_corrected.append(corrected_json)
             if residual_json.exists():
                 per_year_residuals.append(residual_json)
-            if spei_json.exists():
-                per_year_spei.append(spei_json)
 
         per_year_lists = [load_json(p) for p in per_year_corrected]
         n_members = len(per_year_lists[0])
@@ -194,7 +209,13 @@ def main():
         out_base_all = output_dir / Path("data") / full_timeline_all_root
         out_base_all.mkdir(parents=True, exist_ok=True)
         combined_all_json = output_dir / Path("paths") / full_timeline_all_root / Path("corrected_cwb_paths.json")
-        combined_all_qm_json = output_dir / Path("paths") / full_timeline_all_root / Path("qm_hindcast_paths.json")
+        combined_all_spei_json = output_dir / Path("paths") / full_timeline_all_root / Path("corrected_spei_paths.json")
+        nq = int(cfg["qm_arguments"].get("n_quantiles")) if cfg.get("qm_arguments") else None
+        combined_all_qm_json = (
+            output_dir / Path("paths") / Path("qm") / Path(f"nq{nq}") / Path("full_timeline") / Path("qm_hindcast_paths.json")
+            if nq
+            else None
+        )
 
         if cfg["workflow"].get("run_rf_evaluate") == True:
             combined_all_paths = []
@@ -216,20 +237,39 @@ def main():
         if cfg["workflow"].get("run_rf_evaluate") == True:
             combined_all_qm_paths = []
             n_qm_members_all = len(per_lead_qm_lists[0])
+            qm_out_base_dir = (
+                output_dir / Path("data") / Path("qm") / Path(f"nq{nq}") / Path("full_timeline")
+                if nq
+                else None
+            )
+            if nq and qm_out_base_dir:
+                qm_out_base_dir.mkdir(parents=True, exist_ok=True)
             if n_qm_members_all == n_members_all:
                 for member_idx in range(n_qm_members_all):
                     member_files = [per_lead_qm_lists[i][member_idx] for i in range(len(per_lead_qm_lists))]
                     last_stem = Path(member_files[-1]).stem
                     base_stem = last_stem.split("_lm", 1)[0]
-                    out_path = out_base_all / Path(f"{base_stem}_qm_fulltimeline_lm_all.nc")
+                    out_path = (
+                        qm_out_base_dir / Path(f"{base_stem}_qm_fulltimeline_lm_all.nc")
+                    )
                     print(f"Concatenating QM across leadmonths member {member_idx+1}/{n_qm_members_all} -> {out_path}")
                     concat_member_files(member_files, var_name, out_path)
                     combined_all_qm_paths.append(str(out_path))
 
-                write_json(combined_all_qm_json, combined_all_qm_paths)
-                print(f"Wrote combined qm_hindcast_paths.json for lm_all: {combined_all_qm_json}")
+                if combined_all_qm_json:
+                    write_json(combined_all_qm_json, combined_all_qm_paths)
+                    print(f"Wrote combined qm_hindcast_paths.json for lm_all: {combined_all_qm_json}")
         else:
-            combined_all_qm_paths = load_json(combined_all_qm_json)
+            combined_all_qm_paths = load_json(combined_all_qm_json) if combined_all_qm_json and combined_all_qm_json.exists() else []
+
+        spei_root = output_dir / Path("data") / Path("spei")
+        spei_root.mkdir(parents=True, exist_ok=True)
+        reference_spei_json = spei_root / Path("reference_spei_paths.json")
+        hindcasts_spei_json = spei_root / Path("original_hindcasts_spei_paths.json")
+        qm_hindcasts_spei_json = spei_root / Path("qm_hindcasts_fulltimeline_spei_paths.json")
+
+        combined_spei_paths = Path(f"{out_base_all}/combined_spei_member_paths.json")
+        combined_all_spei_paths = load_json_or_fragments(combined_all_spei_json)
 
 
         # Run a single evaluation across all leadmonths combined
@@ -255,6 +295,22 @@ def main():
                 correlation_significance_level=float(cfg["workflow"].get("correlation_significance_level", 0.05)),
             )
             print("Completed full-timeline evaluation for lm_all.")
+
+        if cfg["workflow"].get("evaluate_spei") == True:
+            print("Running full-timeline SPEI evaluation for lm_all (all leadmonths combined)...")
+            print(combined_all_spei_json)
+            evaluate_spei(
+                corrected_spei_paths=combined_all_spei_paths,
+                hindcasts_spei_json=hindcasts_spei_json,
+                reference_spei_json=reference_spei_json,
+                out_dir=out_data_dir,
+                eval_years=years,
+                std_multiplier=float(cfg.get("spei_std_multiplier", 1.0)),
+                plot_dir=str(plot_dir / "spei"),
+                land_mask_path=Path(cfg.get("land_mask_path")) if cfg.get("land_mask_path") else None,
+                qm_hindcasts_json=qm_hindcasts_spei_json,
+            )
+            print("Completed full-timeline SPEI evaluation for lm_all.")
 
         if leadmonth_skill_summary:
             leadmonth_keys = sorted(leadmonth_skill_summary)

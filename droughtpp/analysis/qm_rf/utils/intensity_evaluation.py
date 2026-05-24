@@ -86,18 +86,18 @@ def evaluate_intensity(
         reference_members,
         eval_years=eval_years,
         qm_members=qm_members if qm_members else None,
-        primary_label="RF-corrected",
-        secondary_label="Original",
+        ml_label="RF-corrected",
+        baseline_label="Original",
         std_multiplier=std_multiplier,
     )
 
     common_time = skill["common_time"]
-    corrected_ensemble = skill["primary_ensemble"]
-    baseline_ensemble = skill["secondary_ensemble"]
+    ml_ensemble = skill["ml_ensemble"]
+    baseline_ensemble = skill["baseline_ensemble"]
     reference = skill["reference"]
 
-    corrected_np = skill["primary_np"]
-    baseline_np = skill["secondary_np"]
+    ml_np = skill["ml_np"]
+    baseline_np = skill["baseline_np"]
     reference_np = skill["reference_np"]
 
     qm_ensemble = skill.get("qm_ensemble")
@@ -122,7 +122,7 @@ def evaluate_intensity(
         threshold_zero = np.zeros(reference_np.shape[1:], dtype=float)
 
         bss_event_gt0, _, _ = brier_skill_score_between_ensembles_threshold(
-            corrected_np,
+            ml_np,
             baseline_np,
             reference_np,
             threshold=0.0,
@@ -135,7 +135,7 @@ def evaluate_intensity(
             upper_threshold_label="> 0",
             lower_threshold_label="> 0",
             file_prefix="bss_event_gt0",
-            title_prefix="RF-corrected vs Original",
+            title_prefix="ML vs Baseline",
             land_mask_path=land_mask_path,
         )
 
@@ -153,7 +153,7 @@ def evaluate_intensity(
                 comparison="above",
             )
             corrected_hit_rate_p10 = compute_gridcell_drought_hit_rate_percent(
-                corrected_np,
+                ml_np,
                 reference_np,
                 threshold_zero,
                 comparison="above",
@@ -190,17 +190,7 @@ def evaluate_intensity(
                     ),
                 )
             )
-        extreme_drought_counts.append(
-            (
-                "ML-corrected",
-                *count_extreme_drought_events(
-                    corrected_np,
-                    reference_np,
-                    threshold_zero,
-                    comparison="above",
-                ),
-            )
-        )
+        extreme_drought_counts.append(("ML-corrected", *count_extreme_drought_events(ml_np, reference_np, threshold_zero, comparison="above")))
 
         plot_extreme_drought_hit_histogram(
             extreme_drought_counts,

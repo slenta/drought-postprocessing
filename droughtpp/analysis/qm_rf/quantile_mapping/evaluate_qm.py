@@ -14,7 +14,7 @@ from ..utils.visualization import (
     plot_custom_timeseries,
 )
 from ..config_loader import get_qm_rf_global_config
-from droughtpp.evaluation.evaluation import (
+from ..utils.evaluation import (
     brier_skill_score_between_ensembles,
     mae_per_member_grid,
     rmse_per_member_grid,
